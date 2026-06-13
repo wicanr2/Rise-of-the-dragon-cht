@@ -288,7 +288,7 @@ index 00000000..859f3175
 +
 +#endif
 diff --git a/engines/dgds/dgds.cpp b/engines/dgds/dgds.cpp
-index 63976485..13de5919 100644
+index 63976485..7f2cbe4f 100644
 --- a/engines/dgds/dgds.cpp
 +++ b/engines/dgds/dgds.cpp
 @@ -391,6 +391,9 @@ void DgdsEngine::loadGameFiles() {
@@ -301,13 +301,17 @@ index 63976485..13de5919 100644
  	switch (getGameId()) {
  	case GID_DRAGON:
  		if (getPlatform() == Common::kPlatformDOS)
-@@ -530,6 +533,10 @@ void DgdsEngine::pumpMessages() {
+@@ -530,6 +533,14 @@ void DgdsEngine::pumpMessages() {
  			case kDgdsKeyToggleClock:
  				_clock.toggleVisibleUser();
  				break;
 +			case kDgdsKeyToggleLanguage:
 +				_cjk.cycleLang();
 +				debug(1, "CJK language -> %d", (int)_cjk.lang());
++				// Modal menus/REQs are drawn once; repaint so the switch is immediate.
++				// (In-scene dialogs already redraw every frame.)
++				if (_menu->menuShown())
++					_menu->redrawCurrent();
 +				break;
  			case kDgdsKeyNextChoice:
  				if (_menu->menuShown())
@@ -380,6 +384,18 @@ index 95c84790..6d3a2104 100644
  	Common::StringArray lines;
  	const DgdsFont *font = getDlgTextFont();
  	const int h = font->getFontHeight();
+diff --git a/engines/dgds/menu.h b/engines/dgds/menu.h
+index 57e64cdc..4d961fd5 100644
+--- a/engines/dgds/menu.h
++++ b/engines/dgds/menu.h
+@@ -75,6 +75,7 @@ public:
+ 	void onMouseLDown(const Common::Point &mouse);
+ 	void onMouseMove(const Common::Point &mouse);
+ 	bool menuShown() const { return _curMenu != kMenuNone; }
++	void redrawCurrent() { if (menuShown()) drawMenu(_curMenu, true); } // ROTD CHT: repaint on language toggle
+ 	void hideMenu();
+ 
+ 	void setRequestData(const REQFileData &data);
 diff --git a/engines/dgds/metaengine.cpp b/engines/dgds/metaengine.cpp
 index 0ef2da51..6e5c5725 100644
 --- a/engines/dgds/metaengine.cpp

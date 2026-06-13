@@ -54,14 +54,14 @@
 - [x] patch dgds：`CJKSupport` 模組（載入 DCJK 字型 + `drawString` 雙位元組 Big5 + CJK 逐字斷行）
 - [x] 翻譯 overlay 最小版：DTRN pack，UI 按鈕（`UI:<src>`）+ 對話（`scene:num`）
 - [x] **驗收訊號**：intro 按鈕渲染為「跳過序章 / 播放序章」（`screenshots/poc_zh_intro.png`）
-- [x] 語言切換鍵：F8（dgds keymap 自訂動作，`kDgdsKeyToggleLanguage`），state 切換已驗證
-- [ ] （Phase 2 polish）切語言後強制重繪當前 modal REQ（現在 REQ 畫一次不會自動更新）
+- [x] 語言切換鍵：F8（dgds keymap 自訂動作，`kDgdsKeyToggleLanguage`）
+- [x] 切語言**即時重繪**：`Menu::redrawCurrent()`，modal menu/REQ 立刻更新（場景對話本就逐幀重繪）
 
-### Phase 2 — 翻譯 overlay + 語言切換
-- [ ] 引擎載入 `translations/zh.json`（對話 + UI）
-- [ ] 繪 SDS 對話 / REQ 按鈕時查表替換
-- [ ] 語言切換熱鍵：英 ↔ 中（架構預留 日）
-- [ ] 驗收：遊戲中按鍵即時切換中/英
+### Phase 2 — 翻譯 overlay + 語言切換 ✅（機制）
+- [x] 引擎載入 `zh.dtr`（對話 + UI）
+- [x] 繪 SDS 對話 / REQ 按鈕時查表替換
+- [x] 語言切換熱鍵 F8：英 ↔ 中（架構預留 日）+ 即時重繪
+- [x] 驗收：遊戲中 F8 即時切換中/英（intro 選單實測）
 
 ### Phase 3 — UI / 按鈕中文化
 - [ ] `extract_req.py` 抽出所有 REQ 文字 gadget
