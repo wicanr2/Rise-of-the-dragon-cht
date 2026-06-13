@@ -1,6 +1,6 @@
 diff --git a/engines/dgds/autopilot.cpp b/engines/dgds/autopilot.cpp
 new file mode 100644
-index 00000000..fc4d8ebb
+index 00000000..981adc2e
 --- /dev/null
 +++ b/engines/dgds/autopilot.cpp
 @@ -0,0 +1,89 @@
@@ -77,8 +77,8 @@ index 00000000..fc4d8ebb
 +		engine->saveShot(c.name);
 +		_wait = 1;
 +		break;
-+	case 'g': // set language/display mode (0=orig EN, 1=中文)
-+		engine->getCJK().setLang((CJKLang)c.arg);
++	case 'g': // set display mode (0=Orig/EN 1=中文24 2=中文16 3=Deutsch)
++		engine->getCJK().setMode((DisplayMode)c.arg);
 +		_wait = 3;
 +		break;
 +	case 'w':
@@ -154,10 +154,10 @@ index 00000000..16d0eb13
 +#endif
 diff --git a/engines/dgds/cjk.cpp b/engines/dgds/cjk.cpp
 new file mode 100644
-index 00000000..36cbb883
+index 00000000..deadce2d
 --- /dev/null
 +++ b/engines/dgds/cjk.cpp
-@@ -0,0 +1,239 @@
+@@ -0,0 +1,290 @@
 +/* ScummVM dgds CJK localization support (Rise of the Dragon CHT). Non-upstream. */
 +
 +#include "common/file.h"
@@ -183,19 +183,31 @@ index 00000000..36cbb883
 +static inline bool isBig5Lead(byte b) { return b >= 0x81 && b <= 0xFE; }
 +
 +CJKSupport::CJKSupport()
-+	: _loaded(false), _lang(kCJKLangZH), _w(0), _h(0), _bpr(0), _numGlyphs(0), _glyphs(nullptr) {}
++	: _loaded(false), _mode(kDispZH24), _w(0), _h(0), _bpr(0), _numGlyphs(0), _glyphs(nullptr) {}
 +
-+CJKSupport::~CJKSupport() { delete[] _glyphs; }
++CJKSupport::~CJKSupport() { delete[] _font24.glyphs; delete[] _font16.glyphs; }
 +
-+bool CJKSupport::load(const Common::String &fontFile, const Common::String &trnFile) {
-+	bool okFont = loadFont(fontFile);
-+	bool okTrn = loadTranslations(trnFile);
-+	_loaded = okFont; // translations optional; font required
-+	debug(1, "CJKSupport::load font=%d trn=%d (%d dialogs)", okFont, okTrn, (int)_dialogs.size());
++bool CJKSupport::load() {
++	loadFont("dragon_zh24.dcjk", _font24);
++	loadFont("dragon_zh16.dcjk", _font16);
++	loadTranslations("zh.dtr", _zh);
++	loadTranslations("de.dtr", _de); // optional German overlay (Latin, original font)
++
++	_avail.clear();
++	_avail.push_back(kDispOrig);
++	if (_font24.glyphs && !_zh.empty()) _avail.push_back(kDispZH24);
++	if (_font16.glyphs && !_zh.empty()) _avail.push_back(kDispZH16);
++	if (!_de.empty()) _avail.push_back(kDispDE);
++
++	_mode = (_font24.glyphs && !_zh.empty()) ? kDispZH24 : kDispOrig;
++	selectActiveFont();
++	_loaded = (_font24.glyphs != nullptr);
++	debug(1, "CJKSupport: zh=%d de=%d font24=%d font16=%d modes=%d",
++	      (int)_zh.size(), (int)_de.size(), _font24.glyphs != nullptr, _font16.glyphs != nullptr, (int)_avail.size());
 +	return _loaded;
 +}
 +
-+bool CJKSupport::loadFont(const Common::String &fontFile) {
++bool CJKSupport::loadFont(const Common::String &fontFile, BitmapFont &dst) {
 +	Common::File f;
 +	if (!f.open(Common::Path(fontFile))) {
 +		warning("CJK: font %s not found", fontFile.c_str());
@@ -205,30 +217,32 @@ index 00000000..36cbb883
 +	f.read(magic, 4);
 +	if (memcmp(magic, "DCJK", 4)) { warning("CJK: bad font magic"); return false; }
 +	f.readByte();              // version
-+	_w = f.readByte();
-+	_h = f.readByte();
-+	_bpr = f.readByte();
++	dst.w = f.readByte();
++	dst.h = f.readByte();
++	dst.bpr = f.readByte();
 +	f.readByte();              // encoding
 +	f.readByte(); f.readByte(); // pad
-+	_numGlyphs = f.readUint32LE();
-+	uint32 bytes = _numGlyphs * _bpr * _h;
-+	_glyphs = new byte[bytes];
-+	uint32 got = f.read(_glyphs, bytes);
-+	if (got != bytes) { warning("CJK: short font read %u/%u", got, bytes); return false; }
-+	debug(1, "CJK font %dx%d bpr=%d glyphs=%d", _w, _h, _bpr, _numGlyphs);
++	dst.num = f.readUint32LE();
++	uint32 bytes = dst.num * dst.bpr * dst.h;
++	dst.glyphs = new byte[bytes];
++	uint32 got = f.read(dst.glyphs, bytes);
++	if (got != bytes) {
++		warning("CJK: short font read %u/%u", got, bytes);
++		delete[] dst.glyphs; dst.glyphs = nullptr; return false;
++	}
++	debug(1, "CJK font %s %dx%d glyphs=%d", fontFile.c_str(), dst.w, dst.h, dst.num);
 +	return true;
 +}
 +
-+bool CJKSupport::loadTranslations(const Common::String &trnFile) {
++bool CJKSupport::loadTranslations(const Common::String &trnFile,
++                                  Common::HashMap<Common::String, Common::String> &dst) {
 +	Common::File f;
 +	if (!f.open(Common::Path(trnFile)))
 +		return false;
 +	char magic[4];
 +	f.read(magic, 4);
 +	if (memcmp(magic, "DTRN", 4)) { warning("CJK: bad trn magic"); return false; }
-+	f.readByte();               // version
-+	f.readByte();               // lang
-+	f.readByte(); f.readByte();  // pad
++	f.readByte(); f.readByte(); f.readByte(); f.readByte(); // version, lang, pad x2
 +	uint32 count = f.readUint32LE();
 +	for (uint32 i = 0; i < count; i++) {
 +		uint16 klen = f.readUint16LE();
@@ -237,29 +251,66 @@ index 00000000..36cbb883
 +		uint16 vlen = f.readUint16LE();
 +		Common::String val;
 +		for (uint16 v = 0; v < vlen; v++) val += (char)f.readByte();
-+		_dialogs[key] = val;
++		dst[key] = val;
 +	}
 +	return true;
 +}
 +
-+void CJKSupport::cycleLang() {
-+	_lang = (_lang == kCJKLangOrig) ? kCJKLangZH : kCJKLangOrig;
++void CJKSupport::selectActiveFont() {
++	const BitmapFont &fnt = (_mode == kDispZH16) ? _font16 : _font24;
++	_w = fnt.w; _h = fnt.h; _bpr = fnt.bpr; _numGlyphs = fnt.num; _glyphs = fnt.glyphs;
++}
++
++void CJKSupport::cycleMode() {
++	if (_avail.empty()) return;
++	uint i = 0;
++	for (; i < _avail.size(); i++)
++		if (_avail[i] == _mode) break;
++	_mode = _avail[(i + 1) % _avail.size()];
++	selectActiveFont();
++}
++
++void CJKSupport::setLang(CJKLang l) {
++	_mode = (l == kCJKLangOrig) ? kDispOrig : kDispZH24;
++	selectActiveFont();
++}
++
++void CJKSupport::setMode(DisplayMode m) {
++	_mode = m;
++	selectActiveFont();
++}
++
++const char *CJKSupport::modeName() const {
++	switch (_mode) {
++	case kDispOrig: return "English";
++	case kDispZH24: return "Chinese 24";
++	case kDispZH16: return "Chinese 16";
++	case kDispDE:   return "Deutsch";
++	case kDispJA:   return "Japanese";
++	default:        return "?";
++	}
++}
++
++const Common::HashMap<Common::String, Common::String> &CJKSupport::activeOverlay() const {
++	return (_mode == kDispDE) ? _de : _zh;
 +}
 +
 +const Common::String *CJKSupport::lookupDialog(int sceneNum, int dlgNum) const {
++	const Common::HashMap<Common::String, Common::String> &ov = activeOverlay();
 +	Common::String key = Common::String::format("%d:%d", sceneNum, dlgNum);
-+	if (!_dialogs.contains(key))
++	if (!ov.contains(key))
 +		return nullptr;
-+	return &_dialogs[key];
++	return &ov[key];
 +}
 +
 +const Common::String *CJKSupport::lookupUI(const Common::String &englishSrc) const {
++	const Common::HashMap<Common::String, Common::String> &ov = activeOverlay();
 +	Common::String s = englishSrc;
 +	s.trim(); // normalize leading/trailing spaces (headers carry a leading space)
 +	Common::String key = Common::String("UI:") + s;
-+	if (!_dialogs.contains(key))
++	if (!ov.contains(key))
 +		return nullptr;
-+	return &_dialogs[key];
++	return &ov[key];
 +}
 +
 +const byte *CJKSupport::glyphPtr(int idx) const {
@@ -399,12 +450,12 @@ index 00000000..36cbb883
 +} // namespace Dgds
 diff --git a/engines/dgds/cjk.h b/engines/dgds/cjk.h
 new file mode 100644
-index 00000000..366d2a0c
+index 00000000..14a3beb7
 --- /dev/null
 +++ b/engines/dgds/cjk.h
-@@ -0,0 +1,93 @@
-+/* ScummVM dgds CJK localization support (Rise of the Dragon CHT).
-+ * Non-upstream: engine-side translation overlay + Big5 bitmap font + language switch.
+@@ -0,0 +1,106 @@
++/* ScummVM dgds CJK / multi-language localization support (Rise of the Dragon CHT).
++ * Non-upstream: engine-side translation overlays + bitmap fonts + display-mode cycle.
 + */
 +
 +#ifndef DGDS_CJK_H
@@ -424,6 +475,18 @@ index 00000000..366d2a0c
 +// Big5 linear index: (lead-0x81)*157 + trailoffset; matches tools/build_cjk_font.py
 +int big5LinearIndex(byte lead, byte trail);
 +
++// Display modes cycled with F8. CJK modes (ZH24/ZH16/JA) render the bitmap font via
++// the hi-res deferred path; DE substitutes Latin text drawn with the original game font.
++enum DisplayMode {
++	kDispOrig = 0,  // English (original) — overlay off
++	kDispZH24,      // 中文 24x24
++	kDispZH16,      // 中文 16x16
++	kDispDE,        // Deutsch (de overlay, original font)
++	kDispJA,        // 日本語 (reserved; needs ja.dtr + JP font)
++	kDispCount
++};
++
++// kept for the autopilot 'lang' command (0=orig, 1=中文24)
 +enum CJKLang { kCJKLangOrig = 0, kCJKLangZH = 1, kCJKLangJA = 2 };
 +
 +class CJKSupport {
@@ -431,58 +494,59 @@ index 00000000..366d2a0c
 +	CJKSupport();
 +	~CJKSupport();
 +
-+	// Load DCJK bitmap font + DTRN translation pack (searched via Common::File).
-+	bool load(const Common::String &fontFile, const Common::String &trnFile);
++	// Load both bitmap fonts (24/16) + overlays (zh/de) from the search path.
++	bool load();
 +	bool isLoaded() const { return _loaded; }
 +
-+	CJKLang lang() const { return _lang; }
-+	void setLang(CJKLang l) { _lang = l; }
-+	void cycleLang();             // Orig -> ZH -> (Orig)  [JA reserved]
-+	bool active() const { return _loaded && _lang != kCJKLangOrig; }
++	DisplayMode mode() const { return _mode; }
++	void setLang(CJKLang l); // autopilot compat: 0->Orig, 1->ZH24
++	void setMode(DisplayMode m); // set a specific mode (autopilot / config)
++	void cycleMode();        // advance to the next AVAILABLE mode
++	const char *modeName() const;
 +
-+	// Layout metrics are in the 320x200 virtual-screen space; the bitmap font is
-+	// stored at 2x (24px) for crisp rendering, so layout uses half the glyph size.
-+	int fontHeight() const { return _h / 2; }
++	bool hasOverlay() const { return _mode != kDispOrig; } // a translation should be shown
++	bool isCJK() const { return _mode == kDispZH24 || _mode == kDispZH16 || _mode == kDispJA; }
 +
-+	// Translated string (Big5 bytes) for a dialog slot, or nullptr.
++	int fontHeight() const { return _h / 2; } // layout in 320x200 space (font is 2x)
++
 +	const Common::String *lookupDialog(int sceneNum, int dlgNum) const;
-+
-+	// Translated UI string keyed by its English source text ("UI:<src>"), or nullptr.
 +	const Common::String *lookupUI(const Common::String &englishSrc) const;
 +
-+	// Wrap a Big5 string to maxWidth pixels (every full-width char is a break point;
-+	// '\r' forces a newline). ASCII runs measured with asciiFont.
 +	void wrapText(const Common::String &big5, int maxWidth,
 +	              Common::StringArray &lines, const DgdsFont *asciiFont) const;
-+
-+	// Pixel width of a Big5 string (CJK=_w each, ASCII via asciiFont).
 +	int stringWidth(const Common::String &big5, const DgdsFont *asciiFont) const;
 +
-+	// Record a wrapped line to draw later (coords in 320x200 virtual space). The actual
-+	// crisp 24x24 draw happens in flushDeferred() during the 2x present.
 +	void deferLine(int x, int y, int w, uint32 color, const Common::String &big5,
 +	               Graphics::TextAlign align, const DgdsFont *asciiFont);
 +	void clearDeferred() { _deferred.clear(); }
 +	void flushDeferred(Graphics::ManagedSurface *dst640);
 +
 +private:
-+	bool loadFont(const Common::String &fontFile);
-+	bool loadTranslations(const Common::String &trnFile);
++	struct BitmapFont {
++		byte w = 0, h = 0, bpr = 0;
++		uint32 num = 0;
++		byte *glyphs = nullptr;
++	};
++	bool loadFont(const Common::String &fontFile, BitmapFont &dst);
++	bool loadTranslations(const Common::String &trnFile,
++	                      Common::HashMap<Common::String, Common::String> &dst);
++	void selectActiveFont();
 +	const byte *glyphPtr(int idx) const;
 +	void drawGlyph(Graphics::ManagedSurface *dst, int idx, int x, int y, uint32 color) const;
++	const Common::HashMap<Common::String, Common::String> &activeOverlay() const;
 +
 +	bool _loaded;
-+	CJKLang _lang;
++	DisplayMode _mode;
++	Common::Array<DisplayMode> _avail; // modes whose data actually loaded
 +
-+	// font
++	BitmapFont _font24, _font16;
++	// active font fields (mirror _font24 or _font16; used by the draw code)
 +	byte _w, _h, _bpr;
 +	uint32 _numGlyphs;
 +	byte *_glyphs;
 +
-+	// translations: key "<scene>:<dlg>" -> Big5 string
-+	Common::HashMap<Common::String, Common::String> _dialogs;
++	Common::HashMap<Common::String, Common::String> _zh, _de;
 +
-+	// deferred hi-res text lines (320x200 coords), flushed at 24x24 during present2x
 +	struct DeferredLine {
 +		Common::String text;
 +		int x, y, w;
@@ -497,7 +561,7 @@ index 00000000..366d2a0c
 +
 +#endif
 diff --git a/engines/dgds/dgds.cpp b/engines/dgds/dgds.cpp
-index 63976485..aa4246cb 100644
+index 63976485..edd00831 100644
 --- a/engines/dgds/dgds.cpp
 +++ b/engines/dgds/dgds.cpp
 @@ -35,6 +35,8 @@
@@ -587,7 +651,7 @@ index 63976485..aa4246cb 100644
  	_fontManager->loadFonts(getGameId(), _resource, _decompressor);
  
 +	// ROTD CHT: load 24x24 Big5 CJK font + translation overlay (sit next to game data).
-+	_cjk.load("dragon_zh24.dcjk", "zh.dtr");
++	_cjk.load();
 +
  	switch (getGameId()) {
  	case GID_DRAGON:
@@ -620,8 +684,8 @@ index 63976485..aa4246cb 100644
  				_clock.toggleVisibleUser();
  				break;
 +			case kDgdsKeyToggleLanguage:
-+				_cjk.cycleLang();
-+				debug(1, "CJK language -> %d", (int)_cjk.lang());
++				_cjk.cycleMode();
++				debug(1, "Display mode -> %s", _cjk.modeName());
 +				// Modal menus/REQs are drawn once; repaint so the switch is immediate.
 +				// (In-scene dialogs already redraw every frame.)
 +				if (_menu->menuShown())
@@ -763,39 +827,64 @@ index 1eedfb4d..5b09063b 100644
  	const Common::SharedPtr<Image> &getIcons() { return _icons; }
  	GamePalettes *getGamePals() { return _gamePals; }
 diff --git a/engines/dgds/dialog.cpp b/engines/dgds/dialog.cpp
-index 95c84790..1dbc28a5 100644
+index 95c84790..3ac1fd7e 100644
 --- a/engines/dgds/dialog.cpp
 +++ b/engines/dgds/dialog.cpp
-@@ -553,6 +553,28 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
+@@ -553,10 +553,37 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
  	// For now do the simplest wrapping, no highlighting.
  	assert(_state);
  
-+	// ROTD CHT: if a translation exists for this dialog slot, draw it with the Big5 font.
++	// ROTD CHT: substitute a translated line for this dialog slot.
++	const Common::String *deOverride = nullptr;
 +	{
 +		DgdsEngine *engine = DgdsEngine::getInstance();
 +		CJKSupport &cjk = engine->getCJK();
-+		if (cjk.active() && engine->getScene()) {
-+			const Common::String *zh = cjk.lookupDialog(engine->getScene()->getNum(), _num);
-+			if (zh) {
-+				debug(1, "CJK dialog %d:%d -> %s", engine->getScene()->getNum(), _num, zh->c_str());
-+				const DgdsFont *afont = getDlgTextFont();
-+				const int lh = cjk.fontHeight() + 1;
-+				Common::StringArray zlines;
-+				cjk.wrapText(*zh, _state->_loc.width, zlines, afont);
-+				int ystart = _state->_loc.y + (_state->_loc.height - (int)zlines.size() * lh) / 2;
-+				Graphics::TextAlign al = hasFlag(kDlgFlagLeftJust) ? Graphics::kTextAlignLeft : Graphics::kTextAlignCenter;
-+				for (uint zi = 0; zi < zlines.size(); zi++)
-+					cjk.deferLine(_state->_loc.x, ystart + zi * lh, _state->_loc.width,
-+					              fontcol, zlines[zi], al, afont);
-+				return;
++		if (cjk.hasOverlay() && engine->getScene()) {
++			const Common::String *tr = cjk.lookupDialog(engine->getScene()->getNum(), _num);
++			if (tr) {
++				if (cjk.isCJK()) {
++					// CJK: draw at true bitmap size via the deferred hi-res path.
++					const DgdsFont *afont = getDlgTextFont();
++					const int lh = cjk.fontHeight() + 1;
++					Common::StringArray zlines;
++					cjk.wrapText(*tr, _state->_loc.width, zlines, afont);
++					int zystart = _state->_loc.y + (_state->_loc.height - (int)zlines.size() * lh) / 2;
++					Graphics::TextAlign al = hasFlag(kDlgFlagLeftJust) ? Graphics::kTextAlignLeft : Graphics::kTextAlignCenter;
++					for (uint zi = 0; zi < zlines.size(); zi++)
++						cjk.deferLine(_state->_loc.x, zystart + zi * lh, _state->_loc.width,
++						              fontcol, zlines[zi], al, afont);
++					return;
++				}
++				deOverride = tr; // Deutsch: Latin text, render with the original game font below
 +			}
 +		}
 +	}
++	const Common::String &txt2 = deOverride ? *deOverride : txt;
 +
  	Common::StringArray lines;
  	const DgdsFont *font = getDlgTextFont();
  	const int h = font->getFontHeight();
-@@ -666,7 +688,7 @@ void Dialog::updateSelectedAction(int delta) {
+-	font->wordWrapText(txt, _state->_loc.width, lines, 0, Graphics::kWordWrapOnExplicitNewLines | Graphics::kWordWrapAllowTrailingWhitespace);
++	font->wordWrapText(txt2, _state->_loc.width, lines, 0, Graphics::kWordWrapOnExplicitNewLines | Graphics::kWordWrapAllowTrailingWhitespace);
+ 	uint numPrintedLines = _countPrintedLines(lines);
+ 
+ 	int ystart = _state->_loc.y + (_state->_loc.height - (int)numPrintedLines * h) / 2;
+@@ -567,12 +594,12 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
+ 	int highlightEnd = INT_MAX;
+ 	if (_state->_selectedAction) {
+ 		// find the txt in the full dlg string, as action offsets include the heading
+-		int txtoffset = _str.find(txt);
++		int txtoffset = _str.find(txt2);
+ 		highlightStart = (int)_state->_selectedAction->strStart - txtoffset;
+ 		highlightEnd = (int)_state->_selectedAction->strEnd - txtoffset;
+ 	}
+ 
+-	const Common::Array<int> lineOffs = _wrappedLineOffsets(txt, lines);
++	const Common::Array<int> lineOffs = _wrappedLineOffsets(txt2, lines);
+ 
+ 	Graphics::TextAlign align;
+ 	int xwidth;
+@@ -666,7 +693,7 @@ void Dialog::updateSelectedAction(int delta) {
  
  	if (_action.size() > 1 || !delta) {
  		debug(1, "Dialog %d: update mouse to %d, %d (mouseloc %d, selnum %d)", _num, mouseX, mouseY, _state->_strMouseLoc, _lastSelectedDialogItemNum);
@@ -866,7 +955,7 @@ index 177b6eb4..c5afca86 100644
  				elapsedMillis = g_system->getMillis() - startMillis;
  			}
 diff --git a/engines/dgds/menu.cpp b/engines/dgds/menu.cpp
-index ef32b83e..fd9663df 100644
+index ef32b83e..3cb149b1 100644
 --- a/engines/dgds/menu.cpp
 +++ b/engines/dgds/menu.cpp
 @@ -227,9 +227,9 @@ void Menu::loadCredits() {
@@ -931,7 +1020,7 @@ index ef32b83e..fd9663df 100644
 -		font->drawString(dst.surfacePtr(), textItem._txt, parentX + textItem._x, parentY + textItem._y, w, 0);
 +		// ROTD CHT: localize non-header text items (labels, warnings).
 +		CJKSupport &cjk = DgdsEngine::getInstance()->getCJK();
-+		const Common::String *zhTxt = cjk.active() ? cjk.lookupUI(textItem._txt) : nullptr;
++		const Common::String *zhTxt = cjk.isCJK() ? cjk.lookupUI(textItem._txt) : nullptr;
 +		if (zhTxt) {
 +			int w = cjk.stringWidth(*zhTxt, font);
 +			cjk.deferLine(parentX + textItem._x, parentY + textItem._y, w, 0, *zhTxt, Graphics::kTextAlignLeft, font);
@@ -980,7 +1069,7 @@ index 2dc84cdb..42346018 100644
  	console.o \
  	decompress.o \
 diff --git a/engines/dgds/request.cpp b/engines/dgds/request.cpp
-index 60bff928..575b323e 100644
+index 60bff928..61fbce8c 100644
 --- a/engines/dgds/request.cpp
 +++ b/engines/dgds/request.cpp
 @@ -473,6 +473,16 @@ void ButtonGadget::draw(Graphics::ManagedSurface *dst) const {
@@ -990,7 +1079,7 @@ index 60bff928..575b323e 100644
 +		// ROTD CHT: draw a Chinese label if a UI translation exists for this button.
 +		debug(2, "REQ button name: '%s'", _buttonName.c_str());
 +		CJKSupport &cjkBtn = DgdsEngine::getInstance()->getCJK();
-+		const Common::String *zhBtn = cjkBtn.active() ? cjkBtn.lookupUI(_buttonName) : nullptr;
++		const Common::String *zhBtn = cjkBtn.isCJK() ? cjkBtn.lookupUI(_buttonName) : nullptr;
 +		if (zhBtn) {
 +			const DgdsFont *afont = RequestData::getMenuFont();
 +			int sw = cjkBtn.stringWidth(*zhBtn, afont);
@@ -1015,7 +1104,7 @@ index 60bff928..575b323e 100644
 -		int hwidth = font->getStringWidth(header);
 +		// ROTD CHT: localize the menu/request header.
 +		CJKSupport &cjk = DgdsEngine::getInstance()->getCJK();
-+		const Common::String *zhHdr = cjk.active() ? cjk.lookupUI(header) : nullptr;
++		const Common::String *zhHdr = cjk.isCJK() ? cjk.lookupUI(header) : nullptr;
 +		int hwidth = zhHdr ? cjk.stringWidth(*zhHdr, font) : font->getStringWidth(header);
  		int hheight = font->getFontHeight();
  		int hleft = x + (width - hwidth) / 2;
