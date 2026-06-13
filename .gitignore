@@ -42,3 +42,8 @@ tools/libretro.h
 dist/
 screenshots/ja_frame*
 screenshots/bundle_test.png
+scripts/_*.sh
+screenshots/_*.png
+screenshots/qa_contact.png
+screenshots/qa_modes_contact.png
+screenshots/appimage_zh.png
