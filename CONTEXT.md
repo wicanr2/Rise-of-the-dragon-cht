@@ -29,7 +29,7 @@ Domain glossary. Use these canonical terms in code, filenames, docs.
 |---|---|---|
 | Blade（William "Blade" Hunter）✓ | **孟波** | 主角。致敬《城市獵人》(City Hunter) 盜版主角名，呼應 1990s 軟體世界引進台灣的時代梗 |
 | Hunter | 獵人 | Blade 的姓；「孟波」本身已扣 City Hunter，姓視語境用「獵人」或省略 |
-| Karyn ? | 凱琳 | 孟波女友，後遭綁架（City Hunter 同人梗可改「阿香」，待確認） |
+| Karyn ✓ | 阿香 | 孟波女友，後遭綁架。延伸 City Hunter 同人梗（槙村香 → 阿香），與孟波成對 |
 | Jake ? | 傑克 | 孟波的線人/友人 |
 | Chen / Chen Lu ? | 陳路 | 唐人街黑幫頭目 |
 | Chandra ? | 錢德拉 | 反派，「新黎明教團」首領 |
