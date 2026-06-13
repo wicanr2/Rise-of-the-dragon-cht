@@ -58,6 +58,17 @@ and keep Sega CD official-Japanese as a dedicated future project using these not
   (6144 glyphs ≈ full JIS X 0208 set), 65% ink (consistent with a bitmap font). First-pass
   16×16 linear render didn't resolve into clean glyphs → wrong bit/plane order, or compressed.
 
+## RISE.BIN font-format RE (in progress)
+- Entropy **5.50 bits/byte** → structured (NOT compressed); good sign for a raw bitmap font.
+- A 16×16 / 32-byte-per-glyph, JIS-ku-ten-ordered read from offset 0 does NOT yield clean
+  glyphs in MSB or LSB bit order (a ~12-row periodicity appears) → the cell size, bit layout,
+  OR the table's start offset is different; or RISE.BIN is the loaded program image with the
+  font at an interior offset (not a clean glyph table from byte 0).
+- **Next sub-task = systematic font detection:** scan RISE.BIN (and the .CAT/.BIN set) over
+  candidate (offset, stride∈{18=12×12, 32=16×16, 72=24×24}, bit-order, planar?) and score
+  each region for "font-likeness" (a blank SPACE glyph at the table head, then a plausible
+  ink-density distribution, recognizable simple kana). Confirm by rendering a known kana.
+
 ## Decode roadmap (multi-week)
 1. Reverse `RISE.BIN` glyph format (bit order / planar? / compression) → render clean 16×16 glyphs.
 2. Determine the index→character mapping:
