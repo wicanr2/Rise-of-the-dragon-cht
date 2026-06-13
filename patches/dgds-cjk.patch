@@ -1,9 +1,9 @@
 diff --git a/engines/dgds/cjk.cpp b/engines/dgds/cjk.cpp
 new file mode 100644
-index 00000000..8588503a
+index 00000000..c03dc9f0
 --- /dev/null
 +++ b/engines/dgds/cjk.cpp
-@@ -0,0 +1,200 @@
+@@ -0,0 +1,210 @@
 +/* ScummVM dgds CJK localization support (Rise of the Dragon CHT). Non-upstream. */
 +
 +#include "common/file.h"
@@ -137,7 +137,7 @@ index 00000000..8588503a
 +	while (i < s.size()) {
 +		byte b = (byte)s[i];
 +		if (isBig5Lead(b) && i + 1 < s.size() && big5LinearIndex(b, (byte)s[i + 1]) >= 0) {
-+			w += _w; i += 2;
++			w += _w / 2; i += 2; // layout in 320x200 space; font is 2x
 +		} else {
 +			if (b != '\r' && asciiFont) w += asciiFont->getCharWidth(b);
 +			i += 1;
@@ -160,7 +160,7 @@ index 00000000..8588503a
 +		Common::String unit;
 +		int uw;
 +		if (isBig5Lead(b) && i + 1 < s.size() && big5LinearIndex(b, (byte)s[i + 1]) >= 0) {
-+			unit += (char)b; unit += s[i + 1]; uw = _w; i += 2;
++			unit += (char)b; unit += s[i + 1]; uw = _w / 2; i += 2;
 +		} else {
 +			unit += (char)b; uw = asciiFont ? asciiFont->getCharWidth(b) : 6; i += 1;
 +		}
@@ -173,43 +173,53 @@ index 00000000..8588503a
 +		lines.push_back(cur);
 +}
 +
-+void CJKSupport::drawString(Graphics::ManagedSurface *dst, const Common::String &s,
-+                            int x, int y, int w, uint32 color,
-+                            Graphics::TextAlign align, const DgdsFont *asciiFont) const {
-+	int sw = stringWidth(s, asciiFont);
-+	int xcur = x;
-+	if (align == Graphics::kTextAlignCenter)
-+		xcur = x + (w - sw) / 2;
-+	else if (align == Graphics::kTextAlignRight)
-+		xcur = x + (w - sw);
++void CJKSupport::deferLine(int x, int y, int w, uint32 color, const Common::String &big5,
++                           Graphics::TextAlign align, const DgdsFont *asciiFont) {
++	DeferredLine dl;
++	dl.text = big5; dl.x = x; dl.y = y; dl.w = w; dl.color = color;
++	dl.align = align; dl.asciiFont = asciiFont;
++	_deferred.push_back(dl);
++}
 +
-+	uint i = 0;
-+	while (i < s.size()) {
-+		byte b = (byte)s[i];
-+		if (isBig5Lead(b) && i + 1 < s.size()) {
-+			int idx = big5LinearIndex(b, (byte)s[i + 1]);
-+			if (idx >= 0) {
-+				drawGlyph(dst, idx, xcur, y, color);
-+				xcur += _w; i += 2; continue;
++void CJKSupport::flushDeferred(Graphics::ManagedSurface *dst) {
++	for (const DeferredLine &dl : _deferred) {
++		// Compute the left edge in 320x200 space (after alignment), then x2 to hi-res.
++		int swLayout = stringWidth(dl.text, dl.asciiFont);
++		int layoutX = dl.x;
++		if (dl.align == Graphics::kTextAlignCenter)
++			layoutX = dl.x + (dl.w - swLayout) / 2;
++		else if (dl.align == Graphics::kTextAlignRight)
++			layoutX = dl.x + (dl.w - swLayout);
++
++		int xcur = layoutX * 2;
++		const int y = dl.y * 2;
++		uint i = 0;
++		while (i < dl.text.size()) {
++			byte b = (byte)dl.text[i];
++			if (isBig5Lead(b) && i + 1 < dl.text.size()) {
++				int idx = big5LinearIndex(b, (byte)dl.text[i + 1]);
++				if (idx >= 0) {
++					drawGlyph(dst, idx, xcur, y, dl.color);
++					xcur += _w; i += 2; continue;
++				}
 +			}
-+		}
-+		if (b != '\r') {
-+			if (asciiFont) {
-+				asciiFont->drawChar(dst, b, xcur, y, color);
-+				xcur += asciiFont->getCharWidth(b);
++			if (b != '\r' && dl.asciiFont) {
++				// TODO hi-res ASCII; for now draw the small glyph, advance by layout x2
++				dl.asciiFont->drawChar(dst, b, xcur, y, dl.color);
++				xcur += dl.asciiFont->getCharWidth(b) * 2;
 +			}
++			i += 1;
 +		}
-+		i += 1;
 +	}
 +}
 +
 +} // namespace Dgds
 diff --git a/engines/dgds/cjk.h b/engines/dgds/cjk.h
 new file mode 100644
-index 00000000..859f3175
+index 00000000..366d2a0c
 --- /dev/null
 +++ b/engines/dgds/cjk.h
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,93 @@
 +/* ScummVM dgds CJK localization support (Rise of the Dragon CHT).
 + * Non-upstream: engine-side translation overlay + Big5 bitmap font + language switch.
 + */
@@ -247,7 +257,9 @@ index 00000000..859f3175
 +	void cycleLang();             // Orig -> ZH -> (Orig)  [JA reserved]
 +	bool active() const { return _loaded && _lang != kCJKLangOrig; }
 +
-+	int fontHeight() const { return _h; }
++	// Layout metrics are in the 320x200 virtual-screen space; the bitmap font is
++	// stored at 2x (24px) for crisp rendering, so layout uses half the glyph size.
++	int fontHeight() const { return _h / 2; }
 +
 +	// Translated string (Big5 bytes) for a dialog slot, or nullptr.
 +	const Common::String *lookupDialog(int sceneNum, int dlgNum) const;
@@ -263,10 +275,12 @@ index 00000000..859f3175
 +	// Pixel width of a Big5 string (CJK=_w each, ASCII via asciiFont).
 +	int stringWidth(const Common::String &big5, const DgdsFont *asciiFont) const;
 +
-+	// Draw a single wrapped line. CJK glyphs from the bitmap font, ASCII from asciiFont.
-+	void drawString(Graphics::ManagedSurface *dst, const Common::String &big5,
-+	                int x, int y, int w, uint32 color,
-+	                Graphics::TextAlign align, const DgdsFont *asciiFont) const;
++	// Record a wrapped line to draw later (coords in 320x200 virtual space). The actual
++	// crisp 24x24 draw happens in flushDeferred() during the 2x present.
++	void deferLine(int x, int y, int w, uint32 color, const Common::String &big5,
++	               Graphics::TextAlign align, const DgdsFont *asciiFont);
++	void clearDeferred() { _deferred.clear(); }
++	void flushDeferred(Graphics::ManagedSurface *dst640);
 +
 +private:
 +	bool loadFont(const Common::String &fontFile);
@@ -284,26 +298,89 @@ index 00000000..859f3175
 +
 +	// translations: key "<scene>:<dlg>" -> Big5 string
 +	Common::HashMap<Common::String, Common::String> _dialogs;
++
++	// deferred hi-res text lines (320x200 coords), flushed at 24x24 during present2x
++	struct DeferredLine {
++		Common::String text;
++		int x, y, w;
++		uint32 color;
++		Graphics::TextAlign align;
++		const DgdsFont *asciiFont;
++	};
++	Common::Array<DeferredLine> _deferred;
 +};
 +
 +} // namespace Dgds
 +
 +#endif
 diff --git a/engines/dgds/dgds.cpp b/engines/dgds/dgds.cpp
-index 63976485..252f27b8 100644
+index 63976485..ccd6df3b 100644
 --- a/engines/dgds/dgds.cpp
 +++ b/engines/dgds/dgds.cpp
-@@ -391,6 +391,9 @@ void DgdsEngine::loadGameFiles() {
+@@ -334,7 +334,10 @@ void DgdsEngine::checkDrawInventoryButton() {
+ void DgdsEngine::init(bool restarting) {
+ 	if (!restarting) {
+ 		// Init things with no state only once
+-		initGraphics(SCREEN_WIDTH, SCREEN_HEIGHT);
++		// ROTD CHT: real backend is 2x so the CJK text layer can render at true 24x24.
++		initGraphics(SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2);
++		_vscreen.create(SCREEN_WIDTH, SCREEN_HEIGHT, Graphics::PixelFormat::createFormatCLUT8());
++		_hiresBuffer.create(SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2, Graphics::PixelFormat::createFormatCLUT8());
+ 
+ 		_console = new Console(this);
+ 		_resource = new ResourceManager();
+@@ -384,6 +387,40 @@ void DgdsEngine::init(bool restarting) {
+ 	g_system->fillScreen(0);
+ }
+ 
++// ROTD CHT hi-res text layer: all engine drawing targets the 320x200 _vscreen via
++// the v* wrappers below; present2x() scales it 2x to the real 640x400 backend and
++// stamps the deferred CJK strings at true 24x24 over the scaled art.
++Graphics::Surface *DgdsEngine::vLockScreen() {
++	return _vscreen.surfacePtr();
++}
++
++void DgdsEngine::vCopyRectToScreen(const void *buf, int pitch, int x, int y, int w, int h) {
++	_vscreen.copyRectToSurface(buf, pitch, x, y, w, h);
++}
++
++void DgdsEngine::present2x() {
++	const byte *src = (const byte *)_vscreen.getPixels();
++	byte *dst = (byte *)_hiresBuffer.getPixels();
++	const int sp = _vscreen.pitch, dp = _hiresBuffer.pitch;
++	for (int y = 0; y < SCREEN_HEIGHT; y++) {
++		const byte *srow = src + y * sp;
++		byte *d0 = dst + (y * 2) * dp;
++		byte *d1 = d0 + dp;
++		for (int x = 0; x < SCREEN_WIDTH; x++) {
++			const byte v = srow[x];
++			d0[x * 2] = v; d0[x * 2 + 1] = v;
++			d1[x * 2] = v; d1[x * 2 + 1] = v;
++		}
++	}
++	_cjk.flushDeferred(&_hiresBuffer);
++	g_system->copyRectToScreen(_hiresBuffer.getPixels(), dp, 0, 0, SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2);
++}
++
++void DgdsEngine::vUpdateScreen() {
++	present2x();
++	g_system->updateScreen();
++}
++
+ void DgdsEngine::loadGameFiles() {
+ 	REQFileData invRequestData;
+ 	REQFileData vcrRequestData;
+@@ -391,6 +428,9 @@ void DgdsEngine::loadGameFiles() {
  
  	_fontManager->loadFonts(getGameId(), _resource, _decompressor);
  
-+	// ROTD CHT: load Big5 CJK font + translation overlay (sit next to the game data).
-+	_cjk.load("dragon_zh12.dcjk", "zh.dtr");
++	// ROTD CHT: load 24x24 Big5 CJK font + translation overlay (sit next to game data).
++	_cjk.load("dragon_zh24.dcjk", "zh.dtr");
 +
  	switch (getGameId()) {
  	case GID_DRAGON:
  		if (getPlatform() == Common::kPlatformDOS)
-@@ -487,6 +490,22 @@ void DgdsEngine::loadGameFiles() {
+@@ -487,6 +527,22 @@ void DgdsEngine::loadGameFiles() {
  
  	debug(1, "Parsed Inv Request:\n%s", invRequestData.dump().c_str());
  	debug(1, "Parsed VCR Request:\n%s", vcrRequestData.dump().c_str());
@@ -326,7 +403,7 @@ index 63976485..252f27b8 100644
  }
  
  void DgdsEngine::loadRestartFile() {
-@@ -530,6 +549,14 @@ void DgdsEngine::pumpMessages() {
+@@ -530,6 +586,14 @@ void DgdsEngine::pumpMessages() {
  			case kDgdsKeyToggleClock:
  				_clock.toggleVisibleUser();
  				break;
@@ -341,8 +418,47 @@ index 63976485..252f27b8 100644
  			case kDgdsKeyNextChoice:
  				if (_menu->menuShown())
  					_menu->nextChoice();
+@@ -574,7 +638,8 @@ void DgdsEngine::pumpMessages() {
+ 				|| ev.type == Common::EVENT_RBUTTONDOWN || ev.type == Common::EVENT_RBUTTONUP
+ 				|| ev.type == Common::EVENT_MOUSEMOVE) {
+ 			_lastMouseEvent = ev.type;
+-			_lastMouse = ev.mouse;
++			// ROTD CHT: backend is 2x (640x400) but all game logic is 320x200.
++			_lastMouse = Common::Point(ev.mouse.x / 2, ev.mouse.y / 2);
+ 			// We can keep going if there were multiple moves or a move then a button, but
+ 			// stop if there was a button event to process it now.
+ 			if (_lastMouseEvent != Common::EVENT_MOUSEMOVE)
+@@ -674,6 +739,10 @@ Common::Error DgdsEngine::run() {
+ 		} else {
+ 			debug(10, "****  Starting frame %d time %d ****", frameCount, _thisFrameMs);
+ 
++			// ROTD CHT: rebuild the deferred CJK text each scene frame (dialogs redraw
++			// every frame; menu manages its own clear).
++			_cjk.clearDeferred();
++
+ 			bool clearedDlg = _scene->checkForClearedDialogs();
+ 
+ 			// Willy pauses script execution when the palette is faded by an active
+@@ -789,7 +858,7 @@ Common::Error DgdsEngine::run() {
+ 			bool gameRunning = (!haveActiveDialog && _gameGlobals->getGlobal(0x57));
+ 			_clock.update(gameRunning && shouldRunScripts);
+ 
+-			g_system->copyRectToScreen(_compositionBuffer.getPixels(), SCREEN_WIDTH, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
++			vCopyRectToScreen(_compositionBuffer.getPixels(), SCREEN_WIDTH, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+ 
+ 			_justChangedScene1 = false;
+ 		}
+@@ -807,7 +876,7 @@ Common::Error DgdsEngine::run() {
+ 				CursorMan.showMouse(false);
+ 		}
+ 
+-		g_system->updateScreen();
++		vUpdateScreen();
+ 
+ 		//
+ 		// Limit frame rate to 15 FPS
 diff --git a/engines/dgds/dgds.h b/engines/dgds/dgds.h
-index 1eedfb4d..128c9579 100644
+index 1eedfb4d..bd3ba9da 100644
 --- a/engines/dgds/dgds.h
 +++ b/engines/dgds/dgds.h
 @@ -36,6 +36,7 @@
@@ -361,7 +477,18 @@ index 1eedfb4d..128c9579 100644
  };
  
  enum DgdsMouseCursor {
-@@ -156,6 +158,7 @@ private:
+@@ -121,6 +123,10 @@ class DgdsEngine : public Engine {
+ public:
+ 	Sound *_soundPlayer;
+ 	Graphics::ManagedSurface _compositionBuffer;
++	// ROTD CHT hi-res text layer: a virtual 320x200 screen that all engine code
++	// draws to; present2x() scales it 2x to the real 640x400 and stamps crisp 24x24 CJK.
++	Graphics::ManagedSurface _vscreen;
++	Graphics::ManagedSurface _hiresBuffer;
+ 
+ 	static const byte HOC_CHAR_SWAP_ICONS[];
+ 
+@@ -156,6 +162,7 @@ private:
  	ChinaTrain *_chinaTrain;
  
  	FontManager *_fontManager;
@@ -369,16 +496,24 @@ index 1eedfb4d..128c9579 100644
  	Common::SharedPtr<Image> _corners;
  	Common::SharedPtr<Image> _icons;
  
-@@ -214,6 +217,7 @@ public:
+@@ -214,6 +221,15 @@ public:
  	SDSScene *getScene() { return _scene; }
  	GDSScene *getGDSScene() { return _gdsScene; }
  	const FontManager *getFontMan() const { return _fontManager; }
 +	CJKSupport &getCJK() { return _cjk; }
++
++	// Virtual-screen indirection for the hi-res CJK text layer. Engine code uses
++	// these instead of g_system->{lockScreen,unlockScreen,copyRectToScreen,updateScreen}.
++	Graphics::Surface *vLockScreen();
++	void vUnlockScreen() {}
++	void vCopyRectToScreen(const void *buf, int pitch, int x, int y, int w, int h);
++	void vUpdateScreen();
++	void present2x();
  	const Common::SharedPtr<Image> &getUICorners() { return _corners; }
  	const Common::SharedPtr<Image> &getIcons() { return _icons; }
  	GamePalettes *getGamePals() { return _gamePals; }
 diff --git a/engines/dgds/dialog.cpp b/engines/dgds/dialog.cpp
-index 95c84790..ab4cdac8 100644
+index 95c84790..1dbc28a5 100644
 --- a/engines/dgds/dialog.cpp
 +++ b/engines/dgds/dialog.cpp
 @@ -553,6 +553,28 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
@@ -400,8 +535,8 @@ index 95c84790..ab4cdac8 100644
 +				int ystart = _state->_loc.y + (_state->_loc.height - (int)zlines.size() * lh) / 2;
 +				Graphics::TextAlign al = hasFlag(kDlgFlagLeftJust) ? Graphics::kTextAlignLeft : Graphics::kTextAlignCenter;
 +				for (uint zi = 0; zi < zlines.size(); zi++)
-+					cjk.drawString(dst, zlines[zi], _state->_loc.x, ystart + zi * lh,
-+					               _state->_loc.width, fontcol, al, afont);
++					cjk.deferLine(_state->_loc.x, ystart + zi * lh, _state->_loc.width,
++					              fontcol, zlines[zi], al, afont);
 +				return;
 +			}
 +		}
@@ -410,11 +545,135 @@ index 95c84790..ab4cdac8 100644
  	Common::StringArray lines;
  	const DgdsFont *font = getDlgTextFont();
  	const int h = font->getFontHeight();
+@@ -666,7 +688,7 @@ void Dialog::updateSelectedAction(int delta) {
+ 
+ 	if (_action.size() > 1 || !delta) {
+ 		debug(1, "Dialog %d: update mouse to %d, %d (mouseloc %d, selnum %d)", _num, mouseX, mouseY, _state->_strMouseLoc, _lastSelectedDialogItemNum);
+-		g_system->warpMouse(mouseX, mouseY);
++		g_system->warpMouse(mouseX * 2, mouseY * 2); // ROTD CHT: 2x backend
+ 	}
+ }
+ 
+diff --git a/engines/dgds/globals.cpp b/engines/dgds/globals.cpp
+index bb650cfa..fc89b8b7 100644
+--- a/engines/dgds/globals.cpp
++++ b/engines/dgds/globals.cpp
+@@ -272,7 +272,7 @@ public:
+ 					colno = 0x20;
+ 				}
+ 				DgdsEngine::getInstance()->getGamePals()->setFade(colno, ncols, 0, fade * 4);
+-				g_system->updateScreen();
++				DgdsEngine::getInstance()->vUpdateScreen();
+ 				g_system->delayMillis(5);
+ 			}
+ 		} else {
+@@ -401,8 +401,8 @@ public:
+ 				// Measure real game timing more accurately.  Also probably
+ 				// should pump messages to make the mouse responsive.
+ 				//
+-				g_system->copyRectToScreen(compBuf.getPixels(), SCREEN_WIDTH, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+-				g_system->updateScreen();
++				DgdsEngine::getInstance()->vCopyRectToScreen(compBuf.getPixels(), SCREEN_WIDTH, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
++				DgdsEngine::getInstance()->vUpdateScreen();
+ 				g_system->delayMillis(100);
+ 			}
+ 
+diff --git a/engines/dgds/head.cpp b/engines/dgds/head.cpp
+index 177b6eb4..c5afca86 100644
+--- a/engines/dgds/head.cpp
++++ b/engines/dgds/head.cpp
+@@ -569,8 +569,8 @@ void Conversation::runScriptExclusive() {
+ 
+ 	CursorMan.showMouse(false);
+ 
+-	g_system->copyRectToScreen(engine->_compositionBuffer.getPixels(), SCREEN_WIDTH, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+-	g_system->updateScreen();
++	DgdsEngine::getInstance()->vCopyRectToScreen(engine->_compositionBuffer.getPixels(), SCREEN_WIDTH, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
++	DgdsEngine::getInstance()->vUpdateScreen();
+ 
+ 	// If we have head data we should dim the palette
+ 	engine->dimPalForWillyDialog(_haveHeadData);
+@@ -596,10 +596,10 @@ void Conversation::runScriptExclusive() {
+ 			Common::Rect r = _drawRect.toCommonRect();
+ 			r.clip(Common::Rect(SCREEN_WIDTH, SCREEN_HEIGHT));
+ 			const byte *srcPtr = (const byte *)engine->_compositionBuffer.getPixels() + r.top * SCREEN_WIDTH + r.left;
+-			g_system->copyRectToScreen(srcPtr, SCREEN_WIDTH, r.left, r.top, r.width(), r.height());
++			DgdsEngine::getInstance()->vCopyRectToScreen(srcPtr, SCREEN_WIDTH, r.left, r.top, r.width(), r.height());
+ 		}
+ 
+-		g_system->updateScreen();
++		DgdsEngine::getInstance()->vUpdateScreen();
+ 
+ 		frameCount++;
+ 		// Limit to 15 FPS
+@@ -610,7 +610,7 @@ void Conversation::runScriptExclusive() {
+ 		if (targetMillis > elapsedMillis) {
+ 			while (targetMillis > elapsedMillis) {
+ 				pumpMessages();
+-				g_system->updateScreen();
++				DgdsEngine::getInstance()->vUpdateScreen();
+ 				g_system->delayMillis(5);
+ 				elapsedMillis = g_system->getMillis() - startMillis;
+ 			}
 diff --git a/engines/dgds/menu.cpp b/engines/dgds/menu.cpp
-index ef32b83e..8ecf6ce7 100644
+index ef32b83e..fd9663df 100644
 --- a/engines/dgds/menu.cpp
 +++ b/engines/dgds/menu.cpp
-@@ -415,8 +415,16 @@ void Menu::drawMenuText(Graphics::ManagedSurface &dst) {
+@@ -227,9 +227,9 @@ void Menu::loadCredits() {
+ }
+ 
+ void Menu::setScreenBuffer() {
+-	Graphics::Surface *dst = g_system->lockScreen();
++	Graphics::Surface *dst = DgdsEngine::getInstance()->vLockScreen();
+ 	_screenBuffer.copyFrom(*dst);
+-	g_system->unlockScreen();
++	DgdsEngine::getInstance()->vUnlockScreen();
+ }
+ 
+ bool Menu::updateOptionsGadget(Gadget *gadget) {
+@@ -322,14 +322,17 @@ void Menu::drawMenu(MenuId menu, bool clearScreen /* = true*/) {
+ 	bool firstDraw = (_curMenu != menu);
+ 	_curMenu = menu;
+ 
++	// ROTD CHT: rebuild deferred CJK text for this menu (replaces any scene text).
++	DgdsEngine::getInstance()->getCJK().clearDeferred();
++
+ 	Common::Array<Common::SharedPtr<Gadget> > gadgets = _menuRequests[_curMenu]._gadgets;
+ 
+ 	// Restore background when drawing submenus
+ 	if (clearScreen)
+-		g_system->copyRectToScreen(_screenBuffer.getPixels(), _screenBuffer.pitch, 0, 0, _screenBuffer.w, _screenBuffer.h);
++		DgdsEngine::getInstance()->vCopyRectToScreen(_screenBuffer.getPixels(), _screenBuffer.pitch, 0, 0, _screenBuffer.w, _screenBuffer.h);
+ 
+ 	// This is not very efficient, but it only happens once when the menu is opened.
+-	Graphics::Surface *screen = g_system->lockScreen();
++	Graphics::Surface *screen = DgdsEngine::getInstance()->vLockScreen();
+ 	Graphics::ManagedSurface managed(screen->w, screen->h, screen->format);
+ 	managed.blitFrom(*screen);
+ 	_menuRequests[_curMenu].drawBg(&managed);
+@@ -357,8 +360,8 @@ void Menu::drawMenu(MenuId menu, bool clearScreen /* = true*/) {
+ 	// Can't use transparent blit here as the font is often color 0.
+ 	screen->copyRectToSurface(*managed.surfacePtr(), 0, 0, Common::Rect(screen->w, screen->h));
+ 
+-	g_system->unlockScreen();
+-	g_system->updateScreen();
++	DgdsEngine::getInstance()->vUnlockScreen();
++	DgdsEngine::getInstance()->vUpdateScreen();
+ }
+ 
+ void Menu::hideMenu() {
+@@ -389,8 +392,8 @@ void Menu::putMouseOnSelectedItem() {
+ 		return;
+ 
+ 	const Common::Point midPt = selected->midPoint();
+-	// put the mouse on the first button/slider
+-	g_system->warpMouse(midPt.x, midPt.y);
++	// put the mouse on the first button/slider (x2 for the 640x400 backend)
++	g_system->warpMouse(midPt.x * 2, midPt.y * 2);
+ 	return;
+ }
+ 
+@@ -415,8 +418,16 @@ void Menu::drawMenuText(Graphics::ManagedSurface &dst) {
  		}
  
  		const DgdsFont *font = RequestData::getMenuFont();
@@ -425,7 +684,7 @@ index ef32b83e..8ecf6ce7 100644
 +		const Common::String *zhTxt = cjk.active() ? cjk.lookupUI(textItem._txt) : nullptr;
 +		if (zhTxt) {
 +			int w = cjk.stringWidth(*zhTxt, font);
-+			cjk.drawString(&dst, *zhTxt, parentX + textItem._x, parentY + textItem._y, w, 0, Graphics::kTextAlignLeft, font);
++			cjk.deferLine(parentX + textItem._x, parentY + textItem._y, w, 0, *zhTxt, Graphics::kTextAlignLeft, font);
 +		} else {
 +			int w = font->getStringWidth(textItem._txt);
 +			font->drawString(dst.surfacePtr(), textItem._txt, parentX + textItem._x, parentY + textItem._y, w, 0);
@@ -470,10 +729,10 @@ index 2dc84cdb..4f7a700c 100644
  	console.o \
  	decompress.o \
 diff --git a/engines/dgds/request.cpp b/engines/dgds/request.cpp
-index 60bff928..694a4737 100644
+index 60bff928..575b323e 100644
 --- a/engines/dgds/request.cpp
 +++ b/engines/dgds/request.cpp
-@@ -473,6 +473,17 @@ void ButtonGadget::draw(Graphics::ManagedSurface *dst) const {
+@@ -473,6 +473,16 @@ void ButtonGadget::draw(Graphics::ManagedSurface *dst) const {
  	int16 y = pt.y;
  
  	if (!_buttonName.empty()) {
@@ -484,14 +743,13 @@ index 60bff928..694a4737 100644
 +		if (zhBtn) {
 +			const DgdsFont *afont = RequestData::getMenuFont();
 +			int sw = cjkBtn.stringWidth(*zhBtn, afont);
-+			cjkBtn.drawString(dst, *zhBtn, x + (_width - sw) / 2 + 1,
-+			                  y + (_height - cjkBtn.fontHeight()) / 2, sw, textCol,
-+			                  Graphics::kTextAlignLeft, afont);
++			cjkBtn.deferLine(x + (_width - sw) / 2 + 1, y + (_height - cjkBtn.fontHeight()) / 2,
++			                 sw, textCol, *zhBtn, Graphics::kTextAlignLeft, afont);
 +		} else {
  		const DgdsFont *font = RequestData::getMenuFont();
  		Common::String name = _buttonName;
  		int fontHeight = font->getFontHeight();
-@@ -504,6 +515,7 @@ void ButtonGadget::draw(Graphics::ManagedSurface *dst) const {
+@@ -504,6 +514,7 @@ void ButtonGadget::draw(Graphics::ManagedSurface *dst) const {
  			lineWidth = font->getStringWidth(line2);
  			font->drawString(dst, line2, x + (_width - lineWidth) / 2 + 1, yoffset + fontHeight, lineWidth, textCol);
  		}
@@ -499,7 +757,7 @@ index 60bff928..694a4737 100644
  	} else if (gameId == GID_WILLY && _height == 32) {
  		drawWillyBmpButtons(dst);
  	}
-@@ -996,14 +1008,20 @@ void RequestData::drawCorners(Graphics::ManagedSurface *dst, uint16 startNum, ui
+@@ -996,14 +1007,20 @@ void RequestData::drawCorners(Graphics::ManagedSurface *dst, uint16 startNum, ui
  void RequestData::drawHeader(Graphics::ManagedSurface *dst, int16 x, int16 y, int16 width, int16 yoffset, const Common::String &header, byte fontCol, bool drawBox, byte boxTopColor, byte boxBottomColor) {
  	if (!header.empty()) {
  		const DgdsFont *font = getMenuFont();
@@ -516,9 +774,169 @@ index 60bff928..694a4737 100644
  
 -		font->drawString(dst, header, hleft + 1, htop + 2, hwidth, fontCol);
 +		if (zhHdr)
-+			cjk.drawString(dst, *zhHdr, hleft + 1, htop + 2, hwidth, fontCol, Graphics::kTextAlignLeft, font);
++			cjk.deferLine(hleft + 1, htop + 2, hwidth, fontCol, *zhHdr, Graphics::kTextAlignLeft, font);
 +		else
 +			font->drawString(dst, header, hleft + 1, htop + 2, hwidth, fontCol);
  		if (drawBox) {
  			dst->hLine(hleft - 3, htop, hright, boxTopColor);
  			dst->vLine(hright, htop + 1, hbottom, boxTopColor);
+diff --git a/engines/dgds/ttm.cpp b/engines/dgds/ttm.cpp
+index 36ed1bc4..bd4f836a 100644
+--- a/engines/dgds/ttm.cpp
++++ b/engines/dgds/ttm.cpp
+@@ -269,9 +269,9 @@ static void _copyRectToScreen(const Graphics::ManagedSurface &src, const Common:
+ 	copyRect.clip(Common::Rect(SCREEN_WIDTH, SCREEN_HEIGHT));
+ 	if (copyRect.isEmpty())
+ 		return;
+-	Graphics::Surface *surf = g_system->lockScreen();
++	Graphics::Surface *surf = DgdsEngine::getInstance()->vLockScreen();
+ 	surf->copyRectToSurface(src.rawSurface(), copyRect.left, copyRect.top, copyRect);
+-	g_system->unlockScreen();
++	DgdsEngine::getInstance()->vUnlockScreen();
+ }
+ 
+ static void _dissolveToScreen(const Graphics::ManagedSurface &src, const Common::Rect &r) {
+@@ -282,7 +282,7 @@ static void _dissolveToScreen(const Graphics::ManagedSurface &src, const Common:
+ 	uint16 mask = 0x40, stepNr = 0;
+ 	Common::Rect pixelRect;
+ 
+-	Graphics::Surface *surf = g_system->lockScreen();
++	Graphics::Surface *surf = DgdsEngine::getInstance()->vLockScreen();
+ 
+ 	do {
+ 		mask = (mask & 1) ? (mask >> 1) ^ 0xB400 : mask >> 1;
+@@ -294,15 +294,15 @@ static void _dissolveToScreen(const Graphics::ManagedSurface &src, const Common:
+ 		if (!pixelRect.isEmpty())
+ 			surf->copyRectToSurface(src.rawSurface(), pixelRect.left, pixelRect.top, pixelRect);
+ 		if ((stepNr & 0x3FF) == 0) {
+-			g_system->unlockScreen();
+-			g_system->updateScreen();
++			DgdsEngine::getInstance()->vUnlockScreen();
++			DgdsEngine::getInstance()->vUpdateScreen();
+ 			g_system->delayMillis(5);
+-			surf = g_system->lockScreen();
++			surf = DgdsEngine::getInstance()->vLockScreen();
+ 		}
+ 		stepNr++;
+ 	} while (mask != 0x40);
+ 
+-	g_system->unlockScreen();
++	DgdsEngine::getInstance()->vUnlockScreen();
+ }
+ 
+ static void _doScroll(Graphics::ManagedSurface &compBuf, int16 dir, int16 steps, int16 offset) {
+@@ -317,7 +317,7 @@ static void _doScroll(Graphics::ManagedSurface &compBuf, int16 dir, int16 steps,
+ 	// Example uses:
+ 	// Heart of China bar scene (scroll left-to-right and right-to-left)
+ 	//
+-	Graphics::Surface *screen = g_system->lockScreen();
++	Graphics::Surface *screen = DgdsEngine::getInstance()->vLockScreen();
+ 	Graphics::Surface screenCopy;
+ 
+ 	screenCopy.copyFrom(*screen);
+@@ -365,12 +365,12 @@ static void _doScroll(Graphics::ManagedSurface &compBuf, int16 dir, int16 steps,
+ 			error("TTM scroll invalid scroll direction: %d", dir);
+ 			break;
+ 		}
+-		g_system->unlockScreen();
+-		g_system->updateScreen();
++		DgdsEngine::getInstance()->vUnlockScreen();
++		DgdsEngine::getInstance()->vUpdateScreen();
+ 		g_system->delayMillis(5);
+-		screen = g_system->lockScreen();
++		screen = DgdsEngine::getInstance()->vLockScreen();
+ 	}
+-	g_system->unlockScreen();
++	DgdsEngine::getInstance()->vUnlockScreen();
+ 	screenCopy.free();
+ }
+ 
+@@ -395,7 +395,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
+ 
+ 	case 0xa020:
+ 		_copyRectToScreen(_vm->_compositionBuffer, r);
+-		g_system->updateScreen();
++		DgdsEngine::getInstance()->vUpdateScreen();
+ 		break;
+ 
+ 	case 0xa040:	// Interlaced effect
+@@ -408,7 +408,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
+ 				yoffset += 10;
+ 			}
+ 			if (i % 3 == 0)
+-				g_system->updateScreen();
++				DgdsEngine::getInstance()->vUpdateScreen();
+ 		}
+ 		break;
+ 
+@@ -423,7 +423,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
+ 			}
+ 			_copyRectToScreen(_vm->_compositionBuffer, Common::Rect(Common::Point(r.left + x, r.top), 3, r.height()));
+ 			if (i % 10 == 0)
+-				g_system->updateScreen();
++				DgdsEngine::getInstance()->vUpdateScreen();
+ 		}
+ 		break;
+ 
+@@ -438,7 +438,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
+ 			}
+ 			_copyRectToScreen(_vm->_compositionBuffer, Common::Rect(Common::Point(r.left, r.top + y), r.width(), 3));
+ 			if (i % 10 == 0)
+-				g_system->updateScreen();
++				DgdsEngine::getInstance()->vUpdateScreen();
+ 		}
+ 		break;
+ 
+@@ -478,7 +478,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
+ 				_copyRectToScreen(_vm->_compositionBuffer, Common::Rect(Common::Point(xinside, yinside), width, height));
+ 			}
+ 			if (i % 10 == 0)
+-				g_system->updateScreen();
++				DgdsEngine::getInstance()->vUpdateScreen();
+ 		} while( true );
+ 
+ 		break;
+@@ -624,7 +624,7 @@ void TTMInterpreter::doFadeOutOp(int16 colorno, int16 ncolors, int16 targetcol,
+ 		for (int i = 0; i < 320; i += speed) {
+ 			int fade = MIN(i / 5, 63);
+ 			_vm->getGamePals()->setFade(colorno, ncolors, targetcol, fade * 4);
+-			g_system->updateScreen();
++			DgdsEngine::getInstance()->vUpdateScreen();
+ 			g_system->delayMillis(5);
+ 		}
+ 
+@@ -640,8 +640,8 @@ void TTMInterpreter::doFadeOutOp(int16 colorno, int16 ncolors, int16 targetcol,
+ 		_vm->getBackgroundBuffer().fillRect(Common::Rect(SCREEN_WIDTH, SCREEN_HEIGHT), 0);
+ 	} else {
+ 		// In Willy Beamish, copy comp->screen and comp->back
+-		g_system->copyRectToScreen(_vm->_compositionBuffer.getPixels(), SCREEN_WIDTH, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+-		g_system->updateScreen();
++		DgdsEngine::getInstance()->vCopyRectToScreen(_vm->_compositionBuffer.getPixels(), SCREEN_WIDTH, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
++		DgdsEngine::getInstance()->vUpdateScreen();
+ 		_vm->getBackgroundBuffer().blitFrom(_vm->_compositionBuffer);
+ 	}
+ 	// Stored area is cleared in all games.
+@@ -661,9 +661,9 @@ void TTMInterpreter::doFadeInOp(int16 colorno, int16 ncolors, int16 targetcol, i
+ 			_vm->getGamePals()->setFade(colorno, ncolors, targetcol, fade * 4);
+ 			if (i == 320) {
+ 				// update screen first to make the initial fade-in work
+-				g_system->copyRectToScreen(_vm->_compositionBuffer.getPixels(), SCREEN_WIDTH, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
++				DgdsEngine::getInstance()->vCopyRectToScreen(_vm->_compositionBuffer.getPixels(), SCREEN_WIDTH, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+ 			}
+-			g_system->updateScreen();
++			DgdsEngine::getInstance()->vUpdateScreen();
+ 			g_system->delayMillis(5);
+ 		}
+ 
+@@ -879,9 +879,9 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
+ 		_doScroll(_vm->_compositionBuffer, ivals[0], ivals[1], ivals[2]);
+ 		// After scroll, we need to store the screen contents into the
+ 		// stored area buffer, and copy the background to the front?
+-		Graphics::Surface *screen = g_system->lockScreen();
++		Graphics::Surface *screen = DgdsEngine::getInstance()->vLockScreen();
+ 		_vm->getStoredAreaBuffer().blitFrom(*screen);
+-		g_system->unlockScreen();
++		DgdsEngine::getInstance()->vUnlockScreen();
+ 		_vm->_compositionBuffer.blitFrom(_vm->getStoredAreaBuffer());
+ 		break;
+ 	}

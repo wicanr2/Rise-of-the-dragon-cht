@@ -70,17 +70,16 @@
 - [ ] 排版微調：CJK 比原字高，選單標題位置略偏上需下移
 - [ ] inventory（DINV.REQ 走 `drawInvType`，目前 text item 會 error，需單獨處理）
 
-### Phase 1.5 — 高解析 24×24 中文字層（使用者指定）
-引擎在 320×200 繪圖、ScummVM ×2 → 640×480。現況中文 12px 被一起放大成 24px（blocky）。
-目標：中文以**真正 24×24** 疊在放大後的美術上（更銳利）。
-設計（present 路徑改造）：
-- `dgds.cpp:819` 是唯一的 `copyRectToScreen(_compositionBuffer 320×200)`。
-- 改 `initGraphics(640,400)`；present 時把 320×200 美術 nearest ×2 放進 640×400 暫存。
-- CJK 改「**延遲繪製**」：對話/選單 hook 不直接畫進 320×200，而是記錄 `{big5, x, y, w, col}`，
-  在 ×2 之後以 24×24 字型畫到 640×400 暫存，再 copyRectToScreen。
-- menu 走 `lockScreen` 自己的路徑，需一併處理（gadget 座標 ×2）。
-- 需產生 24×24 字型：`build_cjk_font.py --size 24`（已支援，改用 Noto Sans CJK TC outline）。
-- [ ] 待 Phase 4 譯文合併後實作 + 逐畫面截圖驗證。
+### Phase 1.5 — 高解析 24×24 中文字層 ✅
+真正 24×24 中文疊在 2× 放大美術上（不再是 12px 拉大）。實作 = **虛擬螢幕間接層**：
+- `initGraphics(640,400)`；新增 320×200 `_vscreen`，所有引擎繪圖經 `vLockScreen/vCopyRectToScreen/vUpdateScreen` 改畫到 `_vscreen`（5 檔 ~40 處 present point 全改）。
+- `present2x()`：`_vscreen` nearest ×2 → 640×400 `_hiresBuffer`，再 `flushDeferred` 把 CJK 以 24×24 畫上去。
+- CJK 改**延遲繪製**：dialog/menu/request hook 記錄 `{big5,x,y,w,col}`（320×200 座標），present 時 ×2 畫 24px。佈局用 `_w/2`（12）算寬高。
+- **滑鼠座標修正**：backend 變 640×400 → 進來的滑鼠 `/2`、`warpMouse` `×2`（否則 hit-test 全錯）。
+- 24×24 字型：`build_cjk_font.py --size 24`（Noto Sans CJK TC，glyph 置中）。
+- [x] intro 選單實機驗證：跳過序章/播放序章 **真 24×24 crisp**（`screenshots/hires_intro.png`）。
+- [x] 場景美術 2× 正確（`hires_apartment.png`），對話走同一 deferred 路徑。
+- [ ] 待補：hi-res ASCII（選單數字目前小）、選單標題/按鈕垂直位置微調、ttm 轉場 2× 視覺確認。
 
 ### Phase 4 — 全量翻譯 ✅（初稿）
 - [x] 譯名表定案：Blade→孟波、Karyn→阿香（City Hunter 梗，見 CONTEXT.md / README 譯名考古）
