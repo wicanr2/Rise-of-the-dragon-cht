@@ -82,11 +82,14 @@
 - 需產生 24×24 字型：`build_cjk_font.py --size 24`（已支援，改用 Noto Sans CJK TC outline）。
 - [ ] 待 Phase 4 譯文合併後實作 + 逐畫面截圖驗證。
 
-### Phase 4 — 全量翻譯 🚧
+### Phase 4 — 全量翻譯 ✅（初稿）
 - [x] 譯名表定案：Blade→孟波、Karyn→阿香（City Hunter 梗，見 CONTEXT.md / README 譯名考古）
-- [x] 多代理 workflow：18 批平行機翻 2386 句（套譯名表，Big5-safe，賽博龐克黑色語氣）
-- [ ] 合併 → 驗證 Big5 → 打包 → 逐場景排版/斷行 QA
+- [x] 多代理 workflow：18 批平行機翻 **2386 句**（套譯名表，Big5-safe，賽博龐克黑色語氣）
+- [x] 合併 → 正規化 agent 雜訊（中點→·、尾巴亂碼）→ 驗證 **0 個非 Big5 字** → 打包 zh.dtr（2441 條，0 缺字）
+- [x] 進遊戲確認對話渲染：log `CJK dialog 5:29 -> <Big5>` 證實 drawForeground CJK 分支執行繪字
+- [ ] 逐場景排版/斷行 QA（含選單型對話 `1. xxx` 的 \r）
 - [ ] 人工潤飾關鍵劇情對白
+- [ ] 乾淨的對話泡泡截圖（headless 觸發 look 互動不穩，待更可靠的輸入腳本或實機）
 
 ### Phase 5 — 打包
 - [ ] Linux：patched ScummVM → AppImage

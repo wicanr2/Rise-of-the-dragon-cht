@@ -378,10 +378,10 @@ index 1eedfb4d..128c9579 100644
  	const Common::SharedPtr<Image> &getIcons() { return _icons; }
  	GamePalettes *getGamePals() { return _gamePals; }
 diff --git a/engines/dgds/dialog.cpp b/engines/dgds/dialog.cpp
-index 95c84790..6d3a2104 100644
+index 95c84790..ab4cdac8 100644
 --- a/engines/dgds/dialog.cpp
 +++ b/engines/dgds/dialog.cpp
-@@ -553,6 +553,27 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
+@@ -553,6 +553,28 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
  	// For now do the simplest wrapping, no highlighting.
  	assert(_state);
  
@@ -392,6 +392,7 @@ index 95c84790..6d3a2104 100644
 +		if (cjk.active() && engine->getScene()) {
 +			const Common::String *zh = cjk.lookupDialog(engine->getScene()->getNum(), _num);
 +			if (zh) {
++				debug(1, "CJK dialog %d:%d -> %s", engine->getScene()->getNum(), _num, zh->c_str());
 +				const DgdsFont *afont = getDlgTextFont();
 +				const int lh = cjk.fontHeight() + 1;
 +				Common::StringArray zlines;
