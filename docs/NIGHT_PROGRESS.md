@@ -37,4 +37,22 @@
   靜態字型嘗試：RISE.BIN 在 1bpp/4bpp offset 0 皆雜訊 → 是 sub-CPU 程式非字型（記錄）。
 - 03:40 — **Windows 交叉編譯 ✅✅**：`scripts/build_windows.sh`（Docker + mingw-w64 + SDL2，
   dgds-only）成功 build `scummvm.exe`，strip 後 **27.5MB**。相依僅 SDL2.dll + Windows 系統 DLL
-  （libstdc++/libgcc 靜態連結）。Windows bundle 組好（exe + SDL2.dll + extra/ 資產）。wine 煙測中。
+  （libstdc++/libgcc 靜態連結）。Windows bundle 組好並 zip（12MB，exe + SDL2.dll + extra/ + .bat + README）。
+- 04:00 — **Windows 驗證註記**：headless wine 跑不出來，但實測 **wine 連 trivial hello.exe 都跑不動**
+  （exit 53、無輸出）→ 是這台 wine(11.0)/headless 壞掉，**非 build 缺陷**。build 編譯/連結乾淨、
+  PE32+ 有效 → 判定 build 健全，待實機 Windows 驗證。README 已誠實標註。
+
+## 醒來速覽（成果總表）
+| 項目 | 狀態 |
+|---|---|
+| Linux AppImage + tar.gz | ✅ 實機 headless 驗證渲染中文 |
+| Windows zip（交叉編譯）| ✅ build 健全；待實機驗證（本機 wine 壞） |
+| macOS | ⬜ 需 macOS host（未做） |
+| 全 2386 句翻譯品質稽核 | ✅ 完整/一致/語氣/無溢出皆過 |
+| 排版 QA（場景5 四模式）| ✅ EN/ZH24/ZH16 乾淨 |
+| Sega CD 官方日文（動態）| 🚧 harness 就緒，**硬卡缺 Mega-CD BIOS**（需你提供 128KB boot ROM） |
+| Sega CD 靜態解碼 | 🚧 編碼/字型多條死路已記錄（`docs/SEGACD_RE_NOTES.md`） |
+
+**給你的待辦**：(1) 實機 Windows 測 `dist/rotd-cht-windows-x86_64.zip`。(2) 若要官方日文，
+放一顆 Mega-CD BIOS 到 `/home/anr2/emulator/bios/` 即可跑 `tools/segacd_emu_run.sh` 動態抽日文。
+(3) commits 都在本地，未 push（你 review 後再 push）。
