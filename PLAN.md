@@ -34,7 +34,7 @@
 | Chunk 解壓（RLE/LZW） | `tools/dgds_chunks.py` | ✅ |
 | 對話抽取（SDS→JSON） | `tools/extract_dialogs.py` | ✅ |
 | UI 文字抽取（REQ→JSON） | `tools/extract_req.py` | ⬜ |
-| 字型產生器（→ 24×24 點陣） | `tools/build_cjk_font.py` | ⬜ |
+| 字型產生器（Big5 點陣字） | `tools/build_cjk_font.py` | ✅ |
 | 翻譯包（zh / 日後 ja） | `translations/zh.json` | ⬜ |
 | ScummVM dgds patch | `patches/dgds-cjk.patch` | ⬜ |
 | 無頭測試 + 截圖 | `scripts/run_headless.sh` | ✅ |
@@ -49,7 +49,7 @@
 - [x] 英文/德文槽位對齊驗證
 
 ### Phase 1 — 字型 + 引擎渲染 PoC（進行中）
-- [ ] 產生 24×24 繁中點陣字（單元驗證：ASCII 預覽幾個字正確）
+- [x] 產生 Big5 點陣字（`tools/build_cjk_font.py`，12px=native，2× 後顯示 24px；已 ASCII 驗證 中/文/龍/跳/過）
 - [ ] patch dgds：載入 CJK 字型 + `drawString` 雙位元組路徑 + CJK 逐字斷行
 - [ ] 翻譯 overlay 最小版：硬寫一句中文到 intro REQ + 一個對話泡泡
 - [ ] **驗收訊號**：無頭跑 → 截圖看到中文 intro 按鈕

@@ -21,3 +21,5 @@ build/
 scummvm-src/
 scummvm/
 *.AppImage
+*.dcjk
+fonts/*.dcjk
