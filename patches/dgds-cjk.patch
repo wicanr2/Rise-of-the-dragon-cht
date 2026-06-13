@@ -1,9 +1,9 @@
 diff --git a/engines/dgds/cjk.cpp b/engines/dgds/cjk.cpp
 new file mode 100644
-index 00000000..61f8de38
+index 00000000..8588503a
 --- /dev/null
 +++ b/engines/dgds/cjk.cpp
-@@ -0,0 +1,198 @@
+@@ -0,0 +1,200 @@
 +/* ScummVM dgds CJK localization support (Rise of the Dragon CHT). Non-upstream. */
 +
 +#include "common/file.h"
@@ -100,7 +100,9 @@ index 00000000..61f8de38
 +}
 +
 +const Common::String *CJKSupport::lookupUI(const Common::String &englishSrc) const {
-+	Common::String key = Common::String("UI:") + englishSrc;
++	Common::String s = englishSrc;
++	s.trim(); // normalize leading/trailing spaces (headers carry a leading space)
++	Common::String key = Common::String("UI:") + s;
 +	if (!_dialogs.contains(key))
 +		return nullptr;
 +	return &_dialogs[key];
@@ -288,7 +290,7 @@ index 00000000..859f3175
 +
 +#endif
 diff --git a/engines/dgds/dgds.cpp b/engines/dgds/dgds.cpp
-index 63976485..7f2cbe4f 100644
+index 63976485..252f27b8 100644
 --- a/engines/dgds/dgds.cpp
 +++ b/engines/dgds/dgds.cpp
 @@ -391,6 +391,9 @@ void DgdsEngine::loadGameFiles() {
@@ -301,7 +303,30 @@ index 63976485..7f2cbe4f 100644
  	switch (getGameId()) {
  	case GID_DRAGON:
  		if (getPlatform() == Common::kPlatformDOS)
-@@ -530,6 +533,14 @@ void DgdsEngine::pumpMessages() {
+@@ -487,6 +490,22 @@ void DgdsEngine::loadGameFiles() {
+ 
+ 	debug(1, "Parsed Inv Request:\n%s", invRequestData.dump().c_str());
+ 	debug(1, "Parsed VCR Request:\n%s", vcrRequestData.dump().c_str());
++
++	// ROTD CHT: dump every UI string (button names + text items) for translation
++	// harvesting. Enable with -d3. Tab-separated: UIDUMP<TAB>kind<TAB>reqNum<TAB>text
++	if (gDebugLevel >= 3) {
++		const REQFileData *files[2] = { &invRequestData, &vcrRequestData };
++		for (const REQFileData *rfd : files) {
++			for (const RequestData &rd : rfd->_requests) {
++				for (const TextItem &ti : rd._textItemList)
++					if (!ti._txt.empty())
++						debug(0, "UIDUMP\ttext\t%d\t%s", rd._fileNum, ti._txt.c_str());
++				for (const auto &g : rd._gadgets)
++					if (g && !g->_buttonName.empty())
++						debug(0, "UIDUMP\tbtn\t%d\t%s", rd._fileNum, g->_buttonName.c_str());
++			}
++		}
++	}
+ }
+ 
+ void DgdsEngine::loadRestartFile() {
+@@ -530,6 +549,14 @@ void DgdsEngine::pumpMessages() {
  			case kDgdsKeyToggleClock:
  				_clock.toggleVisibleUser();
  				break;
@@ -384,6 +409,29 @@ index 95c84790..6d3a2104 100644
  	Common::StringArray lines;
  	const DgdsFont *font = getDlgTextFont();
  	const int h = font->getFontHeight();
+diff --git a/engines/dgds/menu.cpp b/engines/dgds/menu.cpp
+index ef32b83e..8ecf6ce7 100644
+--- a/engines/dgds/menu.cpp
++++ b/engines/dgds/menu.cpp
+@@ -415,8 +415,16 @@ void Menu::drawMenuText(Graphics::ManagedSurface &dst) {
+ 		}
+ 
+ 		const DgdsFont *font = RequestData::getMenuFont();
+-		int w = font->getStringWidth(textItem._txt);
+-		font->drawString(dst.surfacePtr(), textItem._txt, parentX + textItem._x, parentY + textItem._y, w, 0);
++		// ROTD CHT: localize non-header text items (labels, warnings).
++		CJKSupport &cjk = DgdsEngine::getInstance()->getCJK();
++		const Common::String *zhTxt = cjk.active() ? cjk.lookupUI(textItem._txt) : nullptr;
++		if (zhTxt) {
++			int w = cjk.stringWidth(*zhTxt, font);
++			cjk.drawString(&dst, *zhTxt, parentX + textItem._x, parentY + textItem._y, w, 0, Graphics::kTextAlignLeft, font);
++		} else {
++			int w = font->getStringWidth(textItem._txt);
++			font->drawString(dst.surfacePtr(), textItem._txt, parentX + textItem._x, parentY + textItem._y, w, 0);
++		}
+ 		pos++;
+ 	}
+ }
 diff --git a/engines/dgds/menu.h b/engines/dgds/menu.h
 index 57e64cdc..4d961fd5 100644
 --- a/engines/dgds/menu.h
@@ -421,7 +469,7 @@ index 2dc84cdb..4f7a700c 100644
  	console.o \
  	decompress.o \
 diff --git a/engines/dgds/request.cpp b/engines/dgds/request.cpp
-index 60bff928..b28d8ae4 100644
+index 60bff928..694a4737 100644
 --- a/engines/dgds/request.cpp
 +++ b/engines/dgds/request.cpp
 @@ -473,6 +473,17 @@ void ButtonGadget::draw(Graphics::ManagedSurface *dst) const {
@@ -450,3 +498,26 @@ index 60bff928..b28d8ae4 100644
  	} else if (gameId == GID_WILLY && _height == 32) {
  		drawWillyBmpButtons(dst);
  	}
+@@ -996,14 +1008,20 @@ void RequestData::drawCorners(Graphics::ManagedSurface *dst, uint16 startNum, ui
+ void RequestData::drawHeader(Graphics::ManagedSurface *dst, int16 x, int16 y, int16 width, int16 yoffset, const Common::String &header, byte fontCol, bool drawBox, byte boxTopColor, byte boxBottomColor) {
+ 	if (!header.empty()) {
+ 		const DgdsFont *font = getMenuFont();
+-		int hwidth = font->getStringWidth(header);
++		// ROTD CHT: localize the menu/request header.
++		CJKSupport &cjk = DgdsEngine::getInstance()->getCJK();
++		const Common::String *zhHdr = cjk.active() ? cjk.lookupUI(header) : nullptr;
++		int hwidth = zhHdr ? cjk.stringWidth(*zhHdr, font) : font->getStringWidth(header);
+ 		int hheight = font->getFontHeight();
+ 		int hleft = x + (width - hwidth) / 2;
+ 		int hright = hleft + hwidth + 3;
+ 		int htop = y + yoffset;
+ 		int hbottom = htop + hheight;
+ 
+-		font->drawString(dst, header, hleft + 1, htop + 2, hwidth, fontCol);
++		if (zhHdr)
++			cjk.drawString(dst, *zhHdr, hleft + 1, htop + 2, hwidth, fontCol, Graphics::kTextAlignLeft, font);
++		else
++			font->drawString(dst, header, hleft + 1, htop + 2, hwidth, fontCol);
+ 		if (drawBox) {
+ 			dst->hLine(hleft - 3, htop, hright, boxTopColor);
+ 			dst->vLine(hright, htop + 1, hbottom, boxTopColor);

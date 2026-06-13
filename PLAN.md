@@ -63,9 +63,12 @@
 - [x] 語言切換熱鍵 F8：英 ↔ 中（架構預留 日）+ 即時重繪
 - [x] 驗收：遊戲中 F8 即時切換中/英（intro 選單實測）
 
-### Phase 3 — UI / 按鈕中文化
-- [ ] `extract_req.py` 抽出所有 REQ 文字 gadget
-- [ ] intro / inventory / save-load / VCR 控制列 全中文
+### Phase 3 — UI / 按鈕中文化 🚧
+- [x] `tools/extract_ui.py`：用引擎 `-d3` dump 抽出**全部 58 個 UI 字串**（按鈕 + 文字項）
+- [x] 三個繪字點全 hook：按鈕（`_buttonName`）+ 標題（`drawHeader`）+ 文字項（`drawMenuText`）
+- [x] 58 UI 字串全翻譯 → 主選單實機全中文（`screenshots/poc_zh_menu.png`）
+- [ ] 排版微調：CJK 比原字高，選單標題位置略偏上需下移
+- [ ] inventory（DINV.REQ 走 `drawInvType`，目前 text item 會 error，需單獨處理）
 
 ### Phase 4 — 全量翻譯
 - [ ] 機翻 2386 句英文 → 繁中初稿，人工潤飾
