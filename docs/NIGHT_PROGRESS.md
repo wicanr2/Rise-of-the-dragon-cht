@@ -56,3 +56,8 @@
 **給你的待辦**：(1) 實機 Windows 測 `dist/rotd-cht-windows-x86_64.zip`。(2) 若要官方日文，
 放一顆 Mega-CD BIOS 到 `/home/anr2/emulator/bios/` 即可跑 `tools/segacd_emu_run.sh` 動態抽日文。
 (3) commits 都在本地，未 push（你 review 後再 push）。
+- 04:30 — **德文 umlaut 修復 ✅**：發現 DE 模式 ä/ö/ü/ß 因英文 DRAGON.FNT 無字形而漏字
+  （Hälfte→Hlfte）。`tools/fix_german_umlauts.py` 忠實重打包 de.dtr，umlaut→ae/oe/ue/ss
+  （1110/2384 句）→ 德文乾淨可讀（實機驗證 de_fixed.png）。三個 bundle 全更新含修復。
+- 04:40 — **4 模式 showcase**：`screenshots/showcase/four_modes.png`（同句 EN/ZH24/ZH16/DE 並排）
+  放上 README。另確認：inventory 無 text item → 不會 crash（安全）；Mega-CD BIOS 全系統查無（動態日文需你提供）。
