@@ -19,11 +19,30 @@ static char g_save_dir[1024];
 static const uint32_t *g_fb;       /* latest framebuffer (XRGB8888) */
 static unsigned g_w, g_h, g_pitch; /* pitch in bytes */
 
-#define SYM(name) static retro_##name##_t p_##name;
-SYM(init) SYM(deinit) SYM(api_version) SYM(get_system_info) SYM(get_system_av_info)
-SYM(set_environment) SYM(set_video_refresh) SYM(set_audio_sample) SYM(set_audio_sample_batch)
-SYM(set_input_poll) SYM(set_input_state) SYM(load_game) SYM(unload_game) SYM(run)
-#undef SYM
+/* libretro.h typedefs the CALLBACKS but not the core entry points -> declare them. */
+typedef void (*fn_void)(void);
+typedef unsigned (*fn_uint)(void);
+typedef void (*fn_psi)(struct retro_system_info *);
+typedef void (*fn_psav)(struct retro_system_av_info *);
+typedef void (*fn_env)(retro_environment_t);
+typedef void (*fn_video)(retro_video_refresh_t);
+typedef void (*fn_asample)(retro_audio_sample_t);
+typedef void (*fn_abatch)(retro_audio_sample_batch_t);
+typedef void (*fn_ipoll)(retro_input_poll_t);
+typedef void (*fn_istate)(retro_input_state_t);
+typedef bool (*fn_loadgame)(const struct retro_game_info *);
+
+static fn_void   p_init, p_deinit, p_unload_game, p_run;
+static fn_uint   p_api_version;
+static fn_psi    p_get_system_info;
+static fn_psav   p_get_system_av_info;
+static fn_env    p_set_environment;
+static fn_video  p_set_video_refresh;
+static fn_asample p_set_audio_sample;
+static fn_abatch p_set_audio_sample_batch;
+static fn_ipoll  p_set_input_poll;
+static fn_istate p_set_input_state;
+static fn_loadgame p_load_game;
 
 static void load_sym(void **dst, const char *name) {
     *dst = dlsym(g_core, name);
@@ -73,13 +92,26 @@ static void input_poll_cb(void) {}
 
 /* Scripted input: press START periodically to advance intro/menus. */
 static unsigned g_frame = 0;
+static unsigned g_input_after = 600; /* let the Sega CD BIOS boot cleanly first */
 static int16_t input_state_cb(unsigned port, unsigned device, unsigned index, unsigned id) {
-    (void)port; (void)device; (void)index;
-    /* tap START for ~6 frames once every 90 frames to skip intro screens */
-    if (id == RETRO_DEVICE_ID_JOYPAD_START && (g_frame % 90) < 6) return 1;
+    if (port != 0 || device != RETRO_DEVICE_JOYPAD) return 0;
+    (void)index;
+    /* after BIOS boot, tap START periodically to advance intro/menus */
+    if (g_frame >= g_input_after && id == RETRO_DEVICE_ID_JOYPAD_START && (g_frame % 120) < 5)
+        return 1;
     return 0;
 }
 
+static unsigned long frame_brightness(void) {
+    if (!g_fb || !g_w || !g_h) return 0;
+    unsigned stride = g_pitch / 4; unsigned long s = 0;
+    for (unsigned y = 0; y < g_h; y += 2)
+        for (unsigned x = 0; x < g_w; x += 2) {
+            uint32_t px = g_fb[y * stride + x];
+            s += ((px >> 16) & 0xff) + ((px >> 8) & 0xff) + (px & 0xff); /* luminance ~ R+G+B */
+        }
+    return s;
+}
 static void dump_ppm(const char *path) {
     if (!g_fb || !g_w || !g_h) return;
     FILE *f = fopen(path, "wb");
@@ -146,10 +178,13 @@ int main(int argc, char **argv) {
     char path[1100];
     for (g_frame = 0; g_frame < frames; g_frame++) {
         p_run();
+        unsigned long b = frame_brightness();
         if (every && (g_frame % every) == 0) {
             snprintf(path, sizeof path, "%s/frame_%05u.ppm", outdir, g_frame);
             dump_ppm(path);
         }
+        if ((g_frame % 60) == 0)
+            fprintf(stderr, "  frame %u/%u  %ux%u brightness=%lu\n", g_frame, frames, g_w, g_h, b);
     }
     snprintf(path, sizeof path, "%s/frame_final.ppm", outdir);
     dump_ppm(path);

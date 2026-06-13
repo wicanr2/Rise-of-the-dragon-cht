@@ -149,6 +149,24 @@ at runtime, giving ground truth (bytes → on-screen glyph). Concrete plan (Dock
 4. Dump the font tiles from VRAM (now we know the base) → render → OCR/JIS-match → index→char.
 This is a substantial new sub-project but it is the only reliable path without a reference engine.
 
+## Dynamic-analysis harness BUILT — but BIOS-BLOCKED (2026-06-14, overnight)
+Built the full headless pipeline to render the JP disc and OCR the official Japanese
+(sidestepping the SD4 encoding): `tools/segacd_run.c` (libretro frontend) +
+`tools/segacd_dynamic.sh` / `tools/segacd_emu_run.sh` (Docker, Genesis Plus GX v1.7.4).
+It loads the disc and runs (`av: 256x192`), confirming the harness works.
+
+**BLOCKER: no Mega-CD BIOS on the system.** Genesis Plus GX (like every accurate Sega CD
+emulator) needs the real 128KB Mega-CD boot ROM. The files in `/home/anr2/emulator/bios`
+(`mpr-18100/mpr-17933/sega_101`) were mis-assumed to be Mega-CD — they are all **Sega Saturn**
+BIOS (`SEGA SEGASATURN`/`SEGA SATURN SYS`). Feeding a Saturn BIOS to GPGX makes the CD sub-CPU
+run illegal instructions → consistent SIGSEGV at ~frame 280 (`scd_update → m68k_op_1010 →
+ctrl_io_write_word`), screen never leaves black. A system-wide search (incl. MAME romsets) found
+NO 128KB Mega-CD BIOS. Cannot legally download it.
+
+**To unblock (needs user):** drop a Mega-CD/Sega-CD boot ROM (128KB, e.g. `bios_CD_J.bin` for
+the JP disc — mpr-14088/mpr-15045/etc.) into `/home/anr2/emulator/bios/`, then
+`tools/segacd_emu_run.sh <biosname> 1800 60` renders frames → OCR pipeline. The harness is ready.
+
 ## Honest ROI assessment (2026-06)
 The official-Japanese extraction is the single hardest, least-certain part of the whole
 project: no ScummVM reference engine, custom (non-SJIS, non-JIS-index) encoding, script-opcode
