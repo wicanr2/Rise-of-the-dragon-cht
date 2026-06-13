@@ -30,4 +30,11 @@
   appimagetool in Docker）產出 `dist/Rise-of-the-Dragon-CHT-x86_64.AppImage`(27M)，實測可執行。
 - 02:25 — **Phase 4 QA ✅**：autopilot 擷取場景 5 獨白於 EN/ZH24/ZH16/DE 四模式，
   `docs/GAME_TEST_REPORT.md`（含 committed 圖 + 排版觀察）。EN/ZH24/ZH16 乾淨；記錄 DE 循環
-  時序 + autopilot↔GTSTATE 熱區枚舉缺口為後續。下一步：README 更新（已有可下載 build）+ 靜態字型嘗試。
+  時序 + autopilot↔GTSTATE 熱區枚舉缺口為後續。
+- 03:00 — **AppImage 驗證 ✅**：實測 AppImage headless 跑遊戲、渲染中文（`screenshots/showcase/appimage_zh.png`）。
+- 03:10 — **翻譯品質稽核 ✅**：2386 句全譯、0 殘留英文人名、譯名一致（孟波×459/阿香×236）、
+  全形冒號 1667/0、**無溢出風險**（中文視覺寬度短於原英文）、語氣忠實（抽樣）。結論：機翻品質高。
+  靜態字型嘗試：RISE.BIN 在 1bpp/4bpp offset 0 皆雜訊 → 是 sub-CPU 程式非字型（記錄）。
+- 03:40 — **Windows 交叉編譯 ✅✅**：`scripts/build_windows.sh`（Docker + mingw-w64 + SDL2，
+  dgds-only）成功 build `scummvm.exe`，strip 後 **27.5MB**。相依僅 SDL2.dll + Windows 系統 DLL
+  （libstdc++/libgcc 靜態連結）。Windows bundle 組好（exe + SDL2.dll + extra/ 資產）。wine 煙測中。
