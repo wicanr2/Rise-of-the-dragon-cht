@@ -69,6 +69,46 @@ and keep Sega CD official-Japanese as a dedicated future project using these not
   each region for "font-likeness" (a blank SPACE glyph at the table head, then a plausible
   ink-density distribution, recognizable simple kana). Confirm by rendering a known kana.
 
+## Font-region scan (numerical, no glyph reproduction)
+- Scored all *.BIN/*.CAT/*.SD5 over 32-byte cells by avg horizontal bit-transitions per row
+  (CJK strokes = smooth/long runs ≈ <2.6; code/random ≈ 7-8) + inky-cell fraction.
+- Top candidates: `CHEN_VD.CAT @0x8000` (tr≈1.21), several `*SE.CAT @0x1a000` (tr≈1.62),
+  `RD0201D.SD5 @0xa000`. **Caveat:** the smooth+inky heuristic also matches solid image
+  regions (sprite/background fills), so these are candidates, not confirmed glyph tables.
+- RISE.BIN scored worse → not a clean offset-0 font table (likely program image).
+- **Resume here:** for each candidate region, render a strip and confirm it's a glyph grid
+  (repeating cell pattern of kana/kanji-shaped marks) vs a single image; then identify the
+  index→character mapping. This is the current frontier of the multi-week decode.
+
+## Decisive encoding tests (counts only, no content reproduced)
+Two hypotheses tested with hard pass/fail signals (hiragana fraction — real JP prose ≈ 40%):
+1. **Shift-JIS — ELIMINATED.** Proper byte-synced SJIS parse over all 754 RD*.SD4 text
+   regions: max hiragana fraction 12.5% (one outlier), median best 1.0%. Nowhere near prose
+   levels → the bytes are not SJIS. (Random bytes-as-SJIS look kanji-heavy with ~0% hiragana,
+   which is what we see — so the earlier "zero hiragana" was NOT a wrong-region artifact.)
+2. **2-byte BE indices in JIS X 0208 ku-ten order — ELIMINATED.** Index→(ku,ten)→EUC-JP→Unicode
+   over bases {0,1,32,188,256,282,376,658,752,2048,4096}: every base yields 83–98% kanji,
+   <14% hiragana. That is the noise signature (JIS rows 16–94 are kanji, so any byte
+   distribution looks kanji-heavy) — not a real script. The font is not a plain JIS-ordered
+   table read as 2-byte words.
+3. **Structural clue (the way forward):** high-byte frequencies of BE16 words pair exactly —
+   `0x0X` and `0x8X` occur at near-equal counts (high bit `0x80` = a flag), `0x00` dominates.
+   Consistent with the earlier "position-prefixed" finding: glyph-index runs are **interleaved
+   with 1-byte control/coordinate opcodes**, so word-aligned sampling is half-misaligned.
+   **Implication:** no statistical shortcut — the Sega CD scene-script opcodes must be reversed
+   to isolate the glyph-index runs *before* any index→char mapping can be tested cleanly.
+
+## Honest ROI assessment (2026-06)
+The official-Japanese extraction is the single hardest, least-certain part of the whole
+project: no ScummVM reference engine, custom (non-SJIS, non-JIS-index) encoding, script-opcode
+RE required before decoding, AND an unsolved PC-slot alignment problem on top. Realistic: a
+dedicated multi-session/multi-week RE with uncertain payoff. **Recommended dual-track:**
+- **Now (ships a working 日文 mode):** machine-translate EN→JA from `dialogs_en.json` →
+  `translations/ja.json` → `ja.dtr`, render with a JP bitmap font via the reserved `kDispJA`.
+  Same proven overlay mechanism as zh/de; gives players a Japanese mode immediately.
+- **Long-track (official source):** keep reversing the Sega CD script per these notes; when it
+  cracks, swap the machine JA for the official Sega CD script. These notes make it resumable.
+
 ## Decode roadmap (multi-week)
 1. Reverse `RISE.BIN` glyph format (bit order / planar? / compression) → render clean 16×16 glyphs.
 2. Determine the index→character mapping:
