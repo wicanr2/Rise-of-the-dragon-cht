@@ -27,6 +27,10 @@
 | ![en](screenshots/showcase/dlg_en.png) | ![zh](screenshots/showcase/dlg_zh_1.png) |
 | 開機第一個畫面 `SKIP / PLAY INTRODUCTION` → | `跳過序章 / 播放序章` |
 
+**`dlg` 直接擷取：場景 5 一次四句不同台詞，全部繁中乾淨上畫面：**
+
+![對白 gallery](screenshots/showcase/dialogue_gallery.png)
+
 連選單也整套中文化了（遊玩 / 控制設定 / 選項 / 校準 / 檔案 / 離開遊戲）：
 
 ![menu](screenshots/poc_zh_menu.png)

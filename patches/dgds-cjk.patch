@@ -1,9 +1,9 @@
 diff --git a/engines/dgds/autopilot.cpp b/engines/dgds/autopilot.cpp
 new file mode 100644
-index 00000000..981adc2e
+index 00000000..b9207054
 --- /dev/null
 +++ b/engines/dgds/autopilot.cpp
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,97 @@
 +/* ScummVM dgds autopilot (ROTD CHT). See autopilot.h. */
 +
 +#include "common/file.h"
@@ -33,6 +33,7 @@ index 00000000..981adc2e
 +		if (op == "scene") c.op = 's';
 +		else if (op == "use") c.op = 'u';
 +		else if (op == "look") c.op = 'l';
++		else if (op == "dlg") c.op = 'd';
 +		else if (op == "shot") c.op = 'p';
 +		else if (op == "wait") c.op = 'w';
 +		else if (op == "lang") c.op = 'g';
@@ -71,6 +72,13 @@ index 00000000..981adc2e
 +	case 'l': // look at hotspot M (runs onLookOps -> description dialogue)
 +		if (engine->getScene())
 +			engine->getScene()->triggerHotAreaLook((uint16)c.arg);
++		_wait = 25;
++		break;
++	case 'd': // show dialog by num directly (QA gallery: any (scene,num) line)
++		if (engine->getScene()) {
++			engine->getScene()->triggerHotAreaLook(0xffff); // clears lingering dialogs (no-op area)
++			engine->getScene()->showDialog(0, (uint16)c.arg);
++		}
 +		_wait = 25;
 +		break;
 +	case 'p': // screenshot
