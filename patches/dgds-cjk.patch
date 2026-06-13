@@ -343,7 +343,7 @@ index 00000000..366d2a0c
 +
 +#endif
 diff --git a/engines/dgds/dgds.cpp b/engines/dgds/dgds.cpp
-index 63976485..ccd6df3b 100644
+index 63976485..fcd10525 100644
 --- a/engines/dgds/dgds.cpp
 +++ b/engines/dgds/dgds.cpp
 @@ -334,7 +334,10 @@ void DgdsEngine::checkDrawInventoryButton() {
@@ -457,7 +457,7 @@ index 63976485..ccd6df3b 100644
  			// We can keep going if there were multiple moves or a move then a button, but
  			// stop if there was a button event to process it now.
  			if (_lastMouseEvent != Common::EVENT_MOUSEMOVE)
-@@ -674,6 +739,10 @@ Common::Error DgdsEngine::run() {
+@@ -674,6 +739,28 @@ Common::Error DgdsEngine::run() {
  		} else {
  			debug(10, "****  Starting frame %d time %d ****", frameCount, _thisFrameMs);
  
@@ -465,10 +465,28 @@ index 63976485..ccd6df3b 100644
 +			// every frame; menu manages its own clear).
 +			_cjk.clearDeferred();
 +
++			// ROTD CHT game-tester: report the interactive scene + hotspot rects when
++			// they change (enable with -d2). The Python driver consumes this to click
++			// hotspots precisely and screenshot every dialogue.
++			if (gDebugLevel >= 2 && _scene) {
++				static int gtScene = -2;
++				static uint gtCount = 0xffff;
++				const Common::List<HotArea> &has = _scene->getHotAreas();
++				if ((int)_scene->getNum() != gtScene || has.size() != gtCount) {
++					gtScene = _scene->getNum();
++					gtCount = has.size();
++					Common::String s = Common::String::format("GTSTATE scene=%d hotspots=", gtScene);
++					for (const HotArea &h : has)
++						s += Common::String::format("%d:%d,%d,%d,%d;", h._num,
++							h._rect.x, h._rect.y, h._rect.width, h._rect.height);
++					debug(0, "%s", s.c_str());
++				}
++			}
++
  			bool clearedDlg = _scene->checkForClearedDialogs();
  
  			// Willy pauses script execution when the palette is faded by an active
-@@ -789,7 +858,7 @@ Common::Error DgdsEngine::run() {
+@@ -789,7 +876,7 @@ Common::Error DgdsEngine::run() {
  			bool gameRunning = (!haveActiveDialog && _gameGlobals->getGlobal(0x57));
  			_clock.update(gameRunning && shouldRunScripts);
  
@@ -477,7 +495,7 @@ index 63976485..ccd6df3b 100644
  
  			_justChangedScene1 = false;
  		}
-@@ -807,7 +876,7 @@ Common::Error DgdsEngine::run() {
+@@ -807,7 +894,7 @@ Common::Error DgdsEngine::run() {
  				CursorMan.showMouse(false);
  		}
  
@@ -809,6 +827,18 @@ index 60bff928..575b323e 100644
  		if (drawBox) {
  			dst->hLine(hleft - 3, htop, hright, boxTopColor);
  			dst->vLine(hright, htop + 1, hbottom, boxTopColor);
+diff --git a/engines/dgds/scene.cpp b/engines/dgds/scene.cpp
+index a83096e7..7c4a359c 100644
+--- a/engines/dgds/scene.cpp
++++ b/engines/dgds/scene.cpp
+@@ -521,6 +521,7 @@ _mouseDownArea(nullptr), _mouseDownCounter(0) {
+ }
+ 
+ bool SDSScene::load(const Common::String &filename, ResourceManager *resourceManager, Decompressor *decompressor) {
++	debug(1, "ROTD-CHT load scene file %s", filename.c_str());
+ 	Common::SeekableReadStream *sceneFile = resourceManager->getResource(filename);
+ 	if (!sceneFile)
+ 		error("Scene file %s not found", filename.c_str());
 diff --git a/engines/dgds/ttm.cpp b/engines/dgds/ttm.cpp
 index 36ed1bc4..bd4f836a 100644
 --- a/engines/dgds/ttm.cpp
