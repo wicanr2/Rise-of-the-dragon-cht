@@ -35,8 +35,9 @@
 | 對話抽取（SDS→JSON） | `tools/extract_dialogs.py` | ✅ |
 | UI 文字抽取（REQ→JSON） | `tools/extract_req.py` | ⬜ |
 | 字型產生器（Big5 點陣字） | `tools/build_cjk_font.py` | ✅ |
-| 翻譯包（zh / 日後 ja） | `translations/zh.json` | ⬜ |
-| ScummVM dgds patch | `patches/dgds-cjk.patch` | ⬜ |
+| 翻譯打包（JSON→DTRN） | `tools/build_translation.py` | ✅ |
+| 翻譯包（zh / 日後 ja） | `translations/zh.json` | 🚧 starter |
+| ScummVM dgds patch | `patches/dgds-cjk.patch` | ✅ PoC |
 | 無頭測試 + 截圖 | `scripts/run_headless.sh` | ✅ |
 | 三平台打包 | `scripts/` | ⬜ |
 
@@ -48,11 +49,13 @@
 - [x] ScummVM 基線可跑（無頭 + 截圖，確認德文 intro 畫面）
 - [x] 英文/德文槽位對齊驗證
 
-### Phase 1 — 字型 + 引擎渲染 PoC（進行中）
+### Phase 1 — 字型 + 引擎渲染 PoC ✅
 - [x] 產生 Big5 點陣字（`tools/build_cjk_font.py`，12px=native，2× 後顯示 24px；已 ASCII 驗證 中/文/龍/跳/過）
-- [ ] patch dgds：載入 CJK 字型 + `drawString` 雙位元組路徑 + CJK 逐字斷行
-- [ ] 翻譯 overlay 最小版：硬寫一句中文到 intro REQ + 一個對話泡泡
-- [ ] **驗收訊號**：無頭跑 → 截圖看到中文 intro 按鈕
+- [x] patch dgds：`CJKSupport` 模組（載入 DCJK 字型 + `drawString` 雙位元組 Big5 + CJK 逐字斷行）
+- [x] 翻譯 overlay 最小版：DTRN pack，UI 按鈕（`UI:<src>`）+ 對話（`scene:num`）
+- [x] **驗收訊號**：intro 按鈕渲染為「跳過序章 / 播放序章」（`screenshots/poc_zh_intro.png`）
+- [x] 語言切換鍵：F8（dgds keymap 自訂動作，`kDgdsKeyToggleLanguage`），state 切換已驗證
+- [ ] （Phase 2 polish）切語言後強制重繪當前 modal REQ（現在 REQ 畫一次不會自動更新）
 
 ### Phase 2 — 翻譯 overlay + 語言切換
 - [ ] 引擎載入 `translations/zh.json`（對話 + UI）

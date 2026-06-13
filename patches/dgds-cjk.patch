@@ -1,0 +1,436 @@
+diff --git a/engines/dgds/cjk.cpp b/engines/dgds/cjk.cpp
+new file mode 100644
+index 00000000..61f8de38
+--- /dev/null
++++ b/engines/dgds/cjk.cpp
+@@ -0,0 +1,198 @@
++/* ScummVM dgds CJK localization support (Rise of the Dragon CHT). Non-upstream. */
++
++#include "common/file.h"
++#include "common/debug.h"
++#include "dgds/cjk.h"
++#include "dgds/font.h"
++
++namespace Dgds {
++
++int big5LinearIndex(byte lead, byte trail) {
++	int to;
++	if (trail >= 0x40 && trail <= 0x7E)
++		to = trail - 0x40;          // 0..62
++	else if (trail >= 0xA1 && trail <= 0xFE)
++		to = 63 + (trail - 0xA1);   // 63..156
++	else
++		return -1;
++	if (lead < 0x81 || lead > 0xFE)
++		return -1;
++	return (lead - 0x81) * 157 + to;
++}
++
++static inline bool isBig5Lead(byte b) { return b >= 0x81 && b <= 0xFE; }
++
++CJKSupport::CJKSupport()
++	: _loaded(false), _lang(kCJKLangZH), _w(0), _h(0), _bpr(0), _numGlyphs(0), _glyphs(nullptr) {}
++
++CJKSupport::~CJKSupport() { delete[] _glyphs; }
++
++bool CJKSupport::load(const Common::String &fontFile, const Common::String &trnFile) {
++	bool okFont = loadFont(fontFile);
++	bool okTrn = loadTranslations(trnFile);
++	_loaded = okFont; // translations optional; font required
++	debug(1, "CJKSupport::load font=%d trn=%d (%d dialogs)", okFont, okTrn, (int)_dialogs.size());
++	return _loaded;
++}
++
++bool CJKSupport::loadFont(const Common::String &fontFile) {
++	Common::File f;
++	if (!f.open(Common::Path(fontFile))) {
++		warning("CJK: font %s not found", fontFile.c_str());
++		return false;
++	}
++	char magic[4];
++	f.read(magic, 4);
++	if (memcmp(magic, "DCJK", 4)) { warning("CJK: bad font magic"); return false; }
++	f.readByte();              // version
++	_w = f.readByte();
++	_h = f.readByte();
++	_bpr = f.readByte();
++	f.readByte();              // encoding
++	f.readByte(); f.readByte(); // pad
++	_numGlyphs = f.readUint32LE();
++	uint32 bytes = _numGlyphs * _bpr * _h;
++	_glyphs = new byte[bytes];
++	uint32 got = f.read(_glyphs, bytes);
++	if (got != bytes) { warning("CJK: short font read %u/%u", got, bytes); return false; }
++	debug(1, "CJK font %dx%d bpr=%d glyphs=%d", _w, _h, _bpr, _numGlyphs);
++	return true;
++}
++
++bool CJKSupport::loadTranslations(const Common::String &trnFile) {
++	Common::File f;
++	if (!f.open(Common::Path(trnFile)))
++		return false;
++	char magic[4];
++	f.read(magic, 4);
++	if (memcmp(magic, "DTRN", 4)) { warning("CJK: bad trn magic"); return false; }
++	f.readByte();               // version
++	f.readByte();               // lang
++	f.readByte(); f.readByte();  // pad
++	uint32 count = f.readUint32LE();
++	for (uint32 i = 0; i < count; i++) {
++		uint16 klen = f.readUint16LE();
++		Common::String key;
++		for (uint16 k = 0; k < klen; k++) key += (char)f.readByte();
++		uint16 vlen = f.readUint16LE();
++		Common::String val;
++		for (uint16 v = 0; v < vlen; v++) val += (char)f.readByte();
++		_dialogs[key] = val;
++	}
++	return true;
++}
++
++void CJKSupport::cycleLang() {
++	_lang = (_lang == kCJKLangOrig) ? kCJKLangZH : kCJKLangOrig;
++}
++
++const Common::String *CJKSupport::lookupDialog(int sceneNum, int dlgNum) const {
++	Common::String key = Common::String::format("%d:%d", sceneNum, dlgNum);
++	if (!_dialogs.contains(key))
++		return nullptr;
++	return &_dialogs[key];
++}
++
++const Common::String *CJKSupport::lookupUI(const Common::String &englishSrc) const {
++	Common::String key = Common::String("UI:") + englishSrc;
++	if (!_dialogs.contains(key))
++		return nullptr;
++	return &_dialogs[key];
++}
++
++const byte *CJKSupport::glyphPtr(int idx) const {
++	if (idx < 0 || (uint32)idx >= _numGlyphs) return nullptr;
++	return _glyphs + (uint32)idx * _bpr * _h;
++}
++
++void CJKSupport::drawGlyph(Graphics::ManagedSurface *dst, int idx, int x, int y, uint32 color) const {
++	const byte *g = glyphPtr(idx);
++	if (!g) return;
++	byte *base = (byte *)dst->getBasePtr(0, 0);
++	int pitch = dst->pitch;
++	for (int ry = 0; ry < _h; ry++) {
++		int ty = y + ry;
++		if (ty < 0 || ty >= dst->h) continue;
++		const byte *row = g + ry * _bpr;
++		for (int cx = 0; cx < _w; cx++) {
++			int tx = x + cx;
++			if (tx < 0 || tx >= dst->w) continue;
++			if (row[cx >> 3] & (0x80 >> (cx & 7)))
++				base[ty * pitch + tx] = (byte)color;
++		}
++	}
++}
++
++int CJKSupport::stringWidth(const Common::String &s, const DgdsFont *asciiFont) const {
++	int w = 0;
++	uint i = 0;
++	while (i < s.size()) {
++		byte b = (byte)s[i];
++		if (isBig5Lead(b) && i + 1 < s.size() && big5LinearIndex(b, (byte)s[i + 1]) >= 0) {
++			w += _w; i += 2;
++		} else {
++			if (b != '\r' && asciiFont) w += asciiFont->getCharWidth(b);
++			i += 1;
++		}
++	}
++	return w;
++}
++
++void CJKSupport::wrapText(const Common::String &s, int maxWidth,
++                          Common::StringArray &lines, const DgdsFont *asciiFont) const {
++	lines.clear();
++	Common::String cur;
++	int curw = 0;
++	uint i = 0;
++	while (i < s.size()) {
++		byte b = (byte)s[i];
++		if (b == '\r') {
++			lines.push_back(cur); cur.clear(); curw = 0; i += 1; continue;
++		}
++		Common::String unit;
++		int uw;
++		if (isBig5Lead(b) && i + 1 < s.size() && big5LinearIndex(b, (byte)s[i + 1]) >= 0) {
++			unit += (char)b; unit += s[i + 1]; uw = _w; i += 2;
++		} else {
++			unit += (char)b; uw = asciiFont ? asciiFont->getCharWidth(b) : 6; i += 1;
++		}
++		if (maxWidth > 0 && curw + uw > maxWidth && !cur.empty()) {
++			lines.push_back(cur); cur.clear(); curw = 0;
++		}
++		cur += unit; curw += uw;
++	}
++	if (!cur.empty() || lines.empty())
++		lines.push_back(cur);
++}
++
++void CJKSupport::drawString(Graphics::ManagedSurface *dst, const Common::String &s,
++                            int x, int y, int w, uint32 color,
++                            Graphics::TextAlign align, const DgdsFont *asciiFont) const {
++	int sw = stringWidth(s, asciiFont);
++	int xcur = x;
++	if (align == Graphics::kTextAlignCenter)
++		xcur = x + (w - sw) / 2;
++	else if (align == Graphics::kTextAlignRight)
++		xcur = x + (w - sw);
++
++	uint i = 0;
++	while (i < s.size()) {
++		byte b = (byte)s[i];
++		if (isBig5Lead(b) && i + 1 < s.size()) {
++			int idx = big5LinearIndex(b, (byte)s[i + 1]);
++			if (idx >= 0) {
++				drawGlyph(dst, idx, xcur, y, color);
++				xcur += _w; i += 2; continue;
++			}
++		}
++		if (b != '\r') {
++			if (asciiFont) {
++				asciiFont->drawChar(dst, b, xcur, y, color);
++				xcur += asciiFont->getCharWidth(b);
++			}
++		}
++		i += 1;
++	}
++}
++
++} // namespace Dgds
+diff --git a/engines/dgds/cjk.h b/engines/dgds/cjk.h
+new file mode 100644
+index 00000000..859f3175
+--- /dev/null
++++ b/engines/dgds/cjk.h
+@@ -0,0 +1,79 @@
++/* ScummVM dgds CJK localization support (Rise of the Dragon CHT).
++ * Non-upstream: engine-side translation overlay + Big5 bitmap font + language switch.
++ */
++
++#ifndef DGDS_CJK_H
++#define DGDS_CJK_H
++
++#include "common/str.h"
++#include "common/hashmap.h"
++#include "common/hash-str.h"
++#include "common/array.h"
++#include "graphics/managed_surface.h"
++#include "graphics/font.h"
++
++namespace Dgds {
++
++class DgdsFont;
++
++// Big5 linear index: (lead-0x81)*157 + trailoffset; matches tools/build_cjk_font.py
++int big5LinearIndex(byte lead, byte trail);
++
++enum CJKLang { kCJKLangOrig = 0, kCJKLangZH = 1, kCJKLangJA = 2 };
++
++class CJKSupport {
++public:
++	CJKSupport();
++	~CJKSupport();
++
++	// Load DCJK bitmap font + DTRN translation pack (searched via Common::File).
++	bool load(const Common::String &fontFile, const Common::String &trnFile);
++	bool isLoaded() const { return _loaded; }
++
++	CJKLang lang() const { return _lang; }
++	void setLang(CJKLang l) { _lang = l; }
++	void cycleLang();             // Orig -> ZH -> (Orig)  [JA reserved]
++	bool active() const { return _loaded && _lang != kCJKLangOrig; }
++
++	int fontHeight() const { return _h; }
++
++	// Translated string (Big5 bytes) for a dialog slot, or nullptr.
++	const Common::String *lookupDialog(int sceneNum, int dlgNum) const;
++
++	// Translated UI string keyed by its English source text ("UI:<src>"), or nullptr.
++	const Common::String *lookupUI(const Common::String &englishSrc) const;
++
++	// Wrap a Big5 string to maxWidth pixels (every full-width char is a break point;
++	// '\r' forces a newline). ASCII runs measured with asciiFont.
++	void wrapText(const Common::String &big5, int maxWidth,
++	              Common::StringArray &lines, const DgdsFont *asciiFont) const;
++
++	// Pixel width of a Big5 string (CJK=_w each, ASCII via asciiFont).
++	int stringWidth(const Common::String &big5, const DgdsFont *asciiFont) const;
++
++	// Draw a single wrapped line. CJK glyphs from the bitmap font, ASCII from asciiFont.
++	void drawString(Graphics::ManagedSurface *dst, const Common::String &big5,
++	                int x, int y, int w, uint32 color,
++	                Graphics::TextAlign align, const DgdsFont *asciiFont) const;
++
++private:
++	bool loadFont(const Common::String &fontFile);
++	bool loadTranslations(const Common::String &trnFile);
++	const byte *glyphPtr(int idx) const;
++	void drawGlyph(Graphics::ManagedSurface *dst, int idx, int x, int y, uint32 color) const;
++
++	bool _loaded;
++	CJKLang _lang;
++
++	// font
++	byte _w, _h, _bpr;
++	uint32 _numGlyphs;
++	byte *_glyphs;
++
++	// translations: key "<scene>:<dlg>" -> Big5 string
++	Common::HashMap<Common::String, Common::String> _dialogs;
++};
++
++} // namespace Dgds
++
++#endif
+diff --git a/engines/dgds/dgds.cpp b/engines/dgds/dgds.cpp
+index 63976485..13de5919 100644
+--- a/engines/dgds/dgds.cpp
++++ b/engines/dgds/dgds.cpp
+@@ -391,6 +391,9 @@ void DgdsEngine::loadGameFiles() {
+ 
+ 	_fontManager->loadFonts(getGameId(), _resource, _decompressor);
+ 
++	// ROTD CHT: load Big5 CJK font + translation overlay (sit next to the game data).
++	_cjk.load("dragon_zh12.dcjk", "zh.dtr");
++
+ 	switch (getGameId()) {
+ 	case GID_DRAGON:
+ 		if (getPlatform() == Common::kPlatformDOS)
+@@ -530,6 +533,10 @@ void DgdsEngine::pumpMessages() {
+ 			case kDgdsKeyToggleClock:
+ 				_clock.toggleVisibleUser();
+ 				break;
++			case kDgdsKeyToggleLanguage:
++				_cjk.cycleLang();
++				debug(1, "CJK language -> %d", (int)_cjk.lang());
++				break;
+ 			case kDgdsKeyNextChoice:
+ 				if (_menu->menuShown())
+ 					_menu->nextChoice();
+diff --git a/engines/dgds/dgds.h b/engines/dgds/dgds.h
+index 1eedfb4d..128c9579 100644
+--- a/engines/dgds/dgds.h
++++ b/engines/dgds/dgds.h
+@@ -36,6 +36,7 @@
+ #include "dgds/resource.h"
+ #include "dgds/clock.h"
+ #include "dgds/menu.h"
++#include "dgds/cjk.h"
+ 
+ 
+ namespace Dgds {
+@@ -92,6 +93,7 @@ enum DgdsKeyEvent {
+ 	kDgdsKeyPickUp,
+ 	kDgdsKeyLook,
+ 	kDgdsKeyActivate,
++	kDgdsKeyToggleLanguage, // ROTD CHT: cycle UI language (original / 繁中)
+ };
+ 
+ enum DgdsMouseCursor {
+@@ -156,6 +158,7 @@ private:
+ 	ChinaTrain *_chinaTrain;
+ 
+ 	FontManager *_fontManager;
++	CJKSupport _cjk; // ROTD CHT: translation overlay + Big5 font + language switch
+ 	Common::SharedPtr<Image> _corners;
+ 	Common::SharedPtr<Image> _icons;
+ 
+@@ -214,6 +217,7 @@ public:
+ 	SDSScene *getScene() { return _scene; }
+ 	GDSScene *getGDSScene() { return _gdsScene; }
+ 	const FontManager *getFontMan() const { return _fontManager; }
++	CJKSupport &getCJK() { return _cjk; }
+ 	const Common::SharedPtr<Image> &getUICorners() { return _corners; }
+ 	const Common::SharedPtr<Image> &getIcons() { return _icons; }
+ 	GamePalettes *getGamePals() { return _gamePals; }
+diff --git a/engines/dgds/dialog.cpp b/engines/dgds/dialog.cpp
+index 95c84790..6d3a2104 100644
+--- a/engines/dgds/dialog.cpp
++++ b/engines/dgds/dialog.cpp
+@@ -553,6 +553,27 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
+ 	// For now do the simplest wrapping, no highlighting.
+ 	assert(_state);
+ 
++	// ROTD CHT: if a translation exists for this dialog slot, draw it with the Big5 font.
++	{
++		DgdsEngine *engine = DgdsEngine::getInstance();
++		CJKSupport &cjk = engine->getCJK();
++		if (cjk.active() && engine->getScene()) {
++			const Common::String *zh = cjk.lookupDialog(engine->getScene()->getNum(), _num);
++			if (zh) {
++				const DgdsFont *afont = getDlgTextFont();
++				const int lh = cjk.fontHeight() + 1;
++				Common::StringArray zlines;
++				cjk.wrapText(*zh, _state->_loc.width, zlines, afont);
++				int ystart = _state->_loc.y + (_state->_loc.height - (int)zlines.size() * lh) / 2;
++				Graphics::TextAlign al = hasFlag(kDlgFlagLeftJust) ? Graphics::kTextAlignLeft : Graphics::kTextAlignCenter;
++				for (uint zi = 0; zi < zlines.size(); zi++)
++					cjk.drawString(dst, zlines[zi], _state->_loc.x, ystart + zi * lh,
++					               _state->_loc.width, fontcol, al, afont);
++				return;
++			}
++		}
++	}
++
+ 	Common::StringArray lines;
+ 	const DgdsFont *font = getDlgTextFont();
+ 	const int h = font->getFontHeight();
+diff --git a/engines/dgds/metaengine.cpp b/engines/dgds/metaengine.cpp
+index 0ef2da51..6e5c5725 100644
+--- a/engines/dgds/metaengine.cpp
++++ b/engines/dgds/metaengine.cpp
+@@ -82,6 +82,7 @@ Common::KeymapArray DgdsMetaEngine::initKeymaps(const char *target) const {
+ 		{ Dgds::kDgdsKeyPickUp, "PICK_UP", _("Pick up / Operate"), "SPACE", "KP5" },
+ 		{ Dgds::kDgdsKeyLook, "LOOK", _("Look"), "RETURN", "," },
+ 		{ Dgds::kDgdsKeyActivate, "ACTIVATE", _("Activate Inventory Object"), "BACKSPACE", nullptr },
++		{ Dgds::kDgdsKeyToggleLanguage, "TOGGLE_LANG", _("Toggle language (English / Chinese)"), "F8", "C+S+l" },
+ 	};
+ 
+ 	Common::Keymap *map = new Common::Keymap(Common::Keymap::kKeymapTypeGame, target, _("Game Keys"));
+diff --git a/engines/dgds/module.mk b/engines/dgds/module.mk
+index 2dc84cdb..4f7a700c 100644
+--- a/engines/dgds/module.mk
++++ b/engines/dgds/module.mk
+@@ -2,6 +2,7 @@ MODULE := engines/dgds
+ 
+ MODULE_OBJS := \
+ 	ads.o \
++	cjk.o \
+ 	clock.o \
+ 	console.o \
+ 	decompress.o \
+diff --git a/engines/dgds/request.cpp b/engines/dgds/request.cpp
+index 60bff928..b28d8ae4 100644
+--- a/engines/dgds/request.cpp
++++ b/engines/dgds/request.cpp
+@@ -473,6 +473,17 @@ void ButtonGadget::draw(Graphics::ManagedSurface *dst) const {
+ 	int16 y = pt.y;
+ 
+ 	if (!_buttonName.empty()) {
++		// ROTD CHT: draw a Chinese label if a UI translation exists for this button.
++		debug(2, "REQ button name: '%s'", _buttonName.c_str());
++		CJKSupport &cjkBtn = DgdsEngine::getInstance()->getCJK();
++		const Common::String *zhBtn = cjkBtn.active() ? cjkBtn.lookupUI(_buttonName) : nullptr;
++		if (zhBtn) {
++			const DgdsFont *afont = RequestData::getMenuFont();
++			int sw = cjkBtn.stringWidth(*zhBtn, afont);
++			cjkBtn.drawString(dst, *zhBtn, x + (_width - sw) / 2 + 1,
++			                  y + (_height - cjkBtn.fontHeight()) / 2, sw, textCol,
++			                  Graphics::kTextAlignLeft, afont);
++		} else {
+ 		const DgdsFont *font = RequestData::getMenuFont();
+ 		Common::String name = _buttonName;
+ 		int fontHeight = font->getFontHeight();
+@@ -504,6 +515,7 @@ void ButtonGadget::draw(Graphics::ManagedSurface *dst) const {
+ 			lineWidth = font->getStringWidth(line2);
+ 			font->drawString(dst, line2, x + (_width - lineWidth) / 2 + 1, yoffset + fontHeight, lineWidth, textCol);
+ 		}
++		} // end non-CJK button text
+ 	} else if (gameId == GID_WILLY && _height == 32) {
+ 		drawWillyBmpButtons(dst);
+ 	}
