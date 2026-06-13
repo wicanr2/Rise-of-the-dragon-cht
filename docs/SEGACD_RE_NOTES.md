@@ -98,6 +98,28 @@ Two hypotheses tested with hard pass/fail signals (hiragana fraction — real JP
    **Implication:** no statistical shortcut — the Sega CD scene-script opcodes must be reversed
    to isolate the glyph-index runs *before* any index→char mapping can be tested cleanly.
 
+## Framing progress — text is a 2-byte VDP-nametable word stream (counts only)
+Decision (2026-06): pursue the **official Sega CD source only** — no machine-translation
+interim. So the script must be fully reversed. Progress on the framing:
+- **Pass/fail tool = Zipf concentration.** Real JP text → top-20 glyph codes cover ~40-50%;
+  opcode/coord noise is near-uniform. `tools/segacd_encoding_probe.py` measures it.
+- **Text is a 2-byte-word stream**, not 1-byte-opcode-interleaved as first thought. Even-aligned
+  BE16 words restricted to [1,6144] give 3745 distinct codes @ 41.3% top-20 concentration =
+  language-like. Out-of-range words (high byte ≥0x18) are control/formatting tokens.
+- **Likely VDP nametable encoding:** each on-screen char = 16-bit word, low bits = font tile
+  index, high bits = VDP attributes (palette/priority/flip; bit15=priority). Explains the
+  `0x0X↔0x8X` frequency pairing (same glyph with/without priority bit) — though pairing is only
+  partial, so the exact index mask is unconfirmed (tested 0x07ff/0x0fff/0x1fff/0x3fff/0x7fff —
+  none beat the unmasked-in-range 41.3%).
+- **Contamination found:** top words are `0x0101/0x0202/0x0303` = doubled-byte FILL runs, i.e.
+  `0x10000` is NOT the clean text start for every file — sprite/fill data bleeds into the window
+  and inflates the histogram. `0x0101`-type words are most likely the **blank/space padding tile**.
+- **Resume here (next sub-tasks):** (1) per-file, parse the header to find the true text-section
+  offset (notes: `@20` BE u32 ≈ 0x10000, but verify per file) and trim trailing fill; (2) on the
+  clean sub-region, re-run Zipf — concentration should rise and doubled-word contamination drop;
+  (3) identify the blank/space tile code; (4) pin the index mask; (5) THEN map index→char by
+  rendering the font tiles (RISE.BIN/.CAT candidates) and OCR/JIS-matching the used set.
+
 ## Honest ROI assessment (2026-06)
 The official-Japanese extraction is the single hardest, least-certain part of the whole
 project: no ScummVM reference engine, custom (non-SJIS, non-JIS-index) encoding, script-opcode

@@ -105,6 +105,31 @@ def highbyte_pairing(files):
     print("  " + "  ".join(f"0x{b:02x}:{c}" for b, c in hi.most_common(10)))
 
 
+def zipf_framing(files):
+    """Framing test: is the 2-byte-word stream language-like? Zipf concentration =
+    top-20 codes' share of all in-range codes. Real JP text ~40-50%; noise ~uniform.
+    Restricting even-aligned BE16 words to the valid index range [1,6144] yields a
+    language-like ~41% with ~3700 distinct codes (consistent with VDP-nametable text;
+    out-of-range words are control/attribute tokens). Caveat: doubled-byte fill runs
+    (0x0101/0x0202 = blank-tile padding) still contaminate until the clean text
+    sub-region is isolated per file."""
+    in_range = Counter()
+    for f in files:
+        d = open(f, "rb").read()
+        s = 0x10000 if len(d) > 0x10000 else 0
+        seg = d[s:]
+        for i in range(0, len(seg) - 1, 2):
+            w = (seg[i] << 8) | seg[i + 1]
+            if 1 <= w <= 6144:
+                in_range[w] += 1
+    tot = sum(in_range.values())
+    if tot < 200:
+        return
+    top = sum(c for _, c in in_range.most_common(20))
+    print(f"[Framing] BE16 words in [1,6144]: kept={tot} distinct={len(in_range)} "
+          f"top20-concentration={top/tot*100:.1f}%  (language-like if >25%)")
+
+
 def main():
     files = sorted(glob.glob(os.path.join(FILES_DIR, "RD*.SD4")))
     if not files:
@@ -113,6 +138,7 @@ def main():
     sjis_hiragana_scan(files)
     jis_index_scan(files)
     highbyte_pairing(files)
+    zipf_framing(files)
 
 
 if __name__ == "__main__":
