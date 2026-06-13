@@ -104,10 +104,12 @@ F8 循環 `CJKSupport` 的 `DisplayMode`：英(原始) → 中文24 → 中文16
 
 實作：`CJKSupport` 改持有多顆字型（24/16）+ 多個 overlay（zh/ja），mode enum 循環；`flushDeferred` 用當前 mode 的字型/overlay。需 `build_cjk_font.py --size 16`。
 
-### Phase 7 — 日文版（Sega CD）
+### Phase 7 — 日文版（Sega CD）🚧 已萃取，待 RE
 來源：`Rise of the Dragon (Japan).chd`（Sega CD，**本地保留、不入 git**）。
-- 萃取 CHD → cue/bin → data track（Sega CD DGDS 變體）→ 抽日文劇本 → `ja.dtr`（日文正確翻譯以此為準）。
-- **語音 + CD 音軌**：Sega CD 版有數位語音與紅皮書音軌；評估能否把語音對應到對話、音軌當配樂（大型未來功能，PC 版原本無語音）。
+- [x] **Docker 內萃取完成**（`tools/extract_segacd.sh`，host 不污染）：CHD → cue/bin → ISO9660 data track（1299 檔）+ 4 條紅皮書 CD 音軌（rotd_02..05.wav）。
+- 已驗證結構：**1010 `.SD4` + 9 `.SD5` + 8 `.SD6`** 場景腳本（`RD*.SD4` 內含 **Shift-JIS 日文對白**，chunk tag `EDA:/ILF:/DFB:`，但 **chunk 不在 offset 0**，前面有 header）、208 `.CAT` 素材、57 `.BIN`、3 `.PCM`（數位語音）、3 `.TXT`。
+- [ ] **RE Sega CD `.SD4` 格式**（與 PC 的 `SDS:` 不同、ScummVM 無此引擎參照 → 全新逆向）→ 抽日文對白 → 對齊 PC `(scene,num)` → `ja.dtr` → 接進 F8 循環（`kDispJA` 已預留）。
+- [ ] **語音/音軌**：4 條 CD 音軌（音樂）+ `.PCM`（語音）評估整合（PC 版原無語音，屬大型未來功能）。
 
 ### Phase 5 — 打包
 - [ ] Linux：patched ScummVM → AppImage
