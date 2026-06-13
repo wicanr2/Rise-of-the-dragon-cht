@@ -70,10 +70,23 @@
 - [ ] 排版微調：CJK 比原字高，選單標題位置略偏上需下移
 - [ ] inventory（DINV.REQ 走 `drawInvType`，目前 text item 會 error，需單獨處理）
 
-### Phase 4 — 全量翻譯
-- [ ] 機翻 2386 句英文 → 繁中初稿，人工潤飾
-- [ ] 1990s 賽博龐克語感、人名地名譯名表（見 CONTEXT.md）
-- [ ] 泡泡寬度 / 斷行 QA（逐場景截圖）
+### Phase 1.5 — 高解析 24×24 中文字層（使用者指定）
+引擎在 320×200 繪圖、ScummVM ×2 → 640×480。現況中文 12px 被一起放大成 24px（blocky）。
+目標：中文以**真正 24×24** 疊在放大後的美術上（更銳利）。
+設計（present 路徑改造）：
+- `dgds.cpp:819` 是唯一的 `copyRectToScreen(_compositionBuffer 320×200)`。
+- 改 `initGraphics(640,400)`；present 時把 320×200 美術 nearest ×2 放進 640×400 暫存。
+- CJK 改「**延遲繪製**」：對話/選單 hook 不直接畫進 320×200，而是記錄 `{big5, x, y, w, col}`，
+  在 ×2 之後以 24×24 字型畫到 640×400 暫存，再 copyRectToScreen。
+- menu 走 `lockScreen` 自己的路徑，需一併處理（gadget 座標 ×2）。
+- 需產生 24×24 字型：`build_cjk_font.py --size 24`（已支援，改用 Noto Sans CJK TC outline）。
+- [ ] 待 Phase 4 譯文合併後實作 + 逐畫面截圖驗證。
+
+### Phase 4 — 全量翻譯 🚧
+- [x] 譯名表定案：Blade→孟波、Karyn→阿香（City Hunter 梗，見 CONTEXT.md / README 譯名考古）
+- [x] 多代理 workflow：18 批平行機翻 2386 句（套譯名表，Big5-safe，賽博龐克黑色語氣）
+- [ ] 合併 → 驗證 Big5 → 打包 → 逐場景排版/斷行 QA
+- [ ] 人工潤飾關鍵劇情對白
 
 ### Phase 5 — 打包
 - [ ] Linux：patched ScummVM → AppImage
