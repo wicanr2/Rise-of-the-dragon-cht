@@ -120,6 +120,35 @@ interim. So the script must be fully reversed. Progress on the framing:
   (3) identify the blank/space tile code; (4) pin the index mask; (5) THEN map index→char by
   rendering the font tiles (RISE.BIN/.CAT candidates) and OCR/JIS-matching the used set.
 
+## CORRECTION (2026-06, sub-task 1): static analysis exhausted; pivot to dynamic
+Deeper structural analysis overturned two earlier optimistic conclusions — record honestly:
+- **`EDA:`/`ILF:`/`DFB:` are NOT chunk tags** — they are coincidental ASCII inside image data
+  (each is followed by a colour ramp, not a chunk length; no `[A-Z]{3}:` occurrence has a
+  plausible following size word). The SD4 is NOT an ASCII-tag DGDS container.
+- **The "41.3% language-like Zipf" was a false positive** — it measured 4bpp IMAGE pixel
+  statistics, not text. Tell-tale: the top "glyph" codes are doubled-small-byte words
+  (`0x0101/0x0202/0x0303/0x0404`) = low-colour image data; nibble histogram is image-like
+  (0x0=40%, top-4 nibbles 69%); byte autocorrelation at tile periods (16/24/32/64/128) is a
+  flat ~0.04 (no clean tile grid → likely RLE/compressed, not raw tiles).
+- **Header (verified across files):** 12 bytes = `@0` BE u32 (≈ filesize − 22 or − 32),
+  `@4` BE u32 (= `@0` − 512 or − 1), `@8` = `0xffff0000` marker. File ends in `0x00` padding.
+  No pointer to a text section. Bulk of the file = image data (colour ramps, byte runs, and
+  high-entropy/low-repeat regions consistent with compression).
+- **Why static RE can't finish this:** the dialogue is a SMALL embedded blob; image data mimics
+  text's skewed value distribution, and compressed regions mimic varied glyph indices. Bulk
+  statistics give false positives in both directions. Confirmed by exhaustive probing.
+
+### The methodology that CAN crack it: dynamic analysis (emulator trace)
+Reference-less + graphics-heavy + compressed ⇒ the right tool is to watch the game DECODE text
+at runtime, giving ground truth (bytes → on-screen glyph). Concrete plan (Docker, host clean):
+1. Run the JP CHD in a debuggable Mega-CD emulator (BlastEm/Genesis Plus GX/Exodus) headless.
+2. Reach a known dialogue screen; dump VRAM — the on-screen text is a contiguous block of VDP
+   nametable entries → reveals the glyph-tile indices actually used + the font's VRAM base.
+3. Breakpoint the 68000 routine that writes those nametable words → trace back to where it reads
+   the SD4 script → recover the real text record format + any decompression.
+4. Dump the font tiles from VRAM (now we know the base) → render → OCR/JIS-match → index→char.
+This is a substantial new sub-project but it is the only reliable path without a reference engine.
+
 ## Honest ROI assessment (2026-06)
 The official-Japanese extraction is the single hardest, least-certain part of the whole
 project: no ScummVM reference engine, custom (non-SJIS, non-JIS-index) encoding, script-opcode
