@@ -33,3 +33,9 @@ autopilot_shots/
 *.iso
 *.7z
 segacd_ja/
+# Sega CD dynamic-analysis local artifacts (copyrighted / bulky)
+segacd_ja/system/
+segacd_ja/frames/
+segacd_ja/*.so
+segacd_ja/*.log
+tools/libretro.h
