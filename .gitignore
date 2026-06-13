@@ -39,3 +39,6 @@ segacd_ja/frames/
 segacd_ja/*.so
 segacd_ja/*.log
 tools/libretro.h
+dist/
+screenshots/ja_frame*
+screenshots/bundle_test.png
