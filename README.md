@@ -13,12 +13,14 @@
 
 > 開機選單 →「孟波」在公寓裡的內心獨白，全程繁體中文、真 24×24 點陣字。
 
-**同一句台詞、F8 循環不同顯示模式**（英文 → 中文 24 → 中文 16 → 德文）：
+**同一句台詞、F8 循環四種顯示模式**（英文 / 中文 24×24 ・ 中文 16×16 / 德文）：
 
-![modes](screenshots/showcase/modes.gif)
+![four modes](screenshots/showcase/four_modes.png)
 
+> 孟波公寓的開場獨白，一句台詞、四種模式並排。中文 24×24 是真點陣高解析；中文 16×16 更貼近
+> 原排版；德文走原始字型（umlaut 以 ae/oe/ue/ss 還原，配合英文版字型）。
 > 全程由**引擎內建 game-tester（autopilot）**自動跑出並截圖。
-> QA 報告範例見 [`docs/GAME_TEST_REPORT.md`](docs/GAME_TEST_REPORT.md)。
+> QA 報告（含全 2,386 句翻譯稽核）見 [`docs/GAME_TEST_REPORT.md`](docs/GAME_TEST_REPORT.md)。
 
 | 原版（英文） | 中文化（本專案） |
 |---|---|
