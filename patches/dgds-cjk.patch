@@ -1,9 +1,9 @@
 diff --git a/engines/dgds/cjk.cpp b/engines/dgds/cjk.cpp
 new file mode 100644
-index 00000000..c03dc9f0
+index 00000000..36cbb883
 --- /dev/null
 +++ b/engines/dgds/cjk.cpp
-@@ -0,0 +1,210 @@
+@@ -0,0 +1,239 @@
 +/* ScummVM dgds CJK localization support (Rise of the Dragon CHT). Non-upstream. */
 +
 +#include "common/file.h"
@@ -181,6 +181,36 @@ index 00000000..c03dc9f0
 +	_deferred.push_back(dl);
 +}
 +
++// Draw a half-width ASCII glyph from the small game font, nearest-scaled 2x, so it
++// matches the 24px CJK height. Sentinel-keyed so the background shows through.
++static void drawAsciiScaled2x(Graphics::ManagedSurface *dst, const DgdsFont *font,
++                              byte ch, int x, int y, uint32 color) {
++	const byte SENT = 0xAB;
++	int aw = font->getCharWidth(ch), ah = font->getFontHeight();
++	if (aw <= 0 || ah <= 0) return;
++	Graphics::ManagedSurface tmp(aw + 1, ah + 1, dst->format);
++	tmp.fillRect(Common::Rect(aw + 1, ah + 1), SENT);
++	font->drawChar(&tmp, ch, 0, 0, color);
++	const int yoff = (24 - ah * 2) / 2;
++	const byte *tp = (const byte *)tmp.getBasePtr(0, 0);
++	byte *dp = (byte *)dst->getBasePtr(0, 0);
++	for (int yy = 0; yy < ah; yy++) {
++		for (int xx = 0; xx < aw; xx++) {
++			byte v = tp[yy * tmp.pitch + xx];
++			if (v == SENT) continue;
++			for (int dy = 0; dy < 2; dy++) {
++				int py = y + yoff + yy * 2 + dy;
++				if (py < 0 || py >= dst->h) continue;
++				byte *row = dp + py * dst->pitch;
++				for (int dx = 0; dx < 2; dx++) {
++					int px = x + xx * 2 + dx;
++					if (px >= 0 && px < dst->w) row[px] = (byte)v;
++				}
++			}
++		}
++	}
++}
++
 +void CJKSupport::flushDeferred(Graphics::ManagedSurface *dst) {
 +	for (const DeferredLine &dl : _deferred) {
 +		// Compute the left edge in 320x200 space (after alignment), then x2 to hi-res.
@@ -192,7 +222,7 @@ index 00000000..c03dc9f0
 +			layoutX = dl.x + (dl.w - swLayout);
 +
 +		int xcur = layoutX * 2;
-+		const int y = dl.y * 2;
++		const int y = dl.y * 2 + 2; // small downward nudge so CJK sits centered in bubbles/buttons
 +		uint i = 0;
 +		while (i < dl.text.size()) {
 +			byte b = (byte)dl.text[i];
@@ -204,8 +234,7 @@ index 00000000..c03dc9f0
 +				}
 +			}
 +			if (b != '\r' && dl.asciiFont) {
-+				// TODO hi-res ASCII; for now draw the small glyph, advance by layout x2
-+				dl.asciiFont->drawChar(dst, b, xcur, y, dl.color);
++				drawAsciiScaled2x(dst, dl.asciiFont, b, xcur, y, dl.color);
 +				xcur += dl.asciiFont->getCharWidth(b) * 2;
 +			}
 +			i += 1;
