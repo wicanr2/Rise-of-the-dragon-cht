@@ -32,6 +32,20 @@ Working notes for extracting the official Japanese script from the Sega CD relea
    Candidate bridges: the `.CAT` asset names (match PC scene names), or matching dialogue
    order/count per scene against `dialogs_en.json`. Unproven.
 
+## Alignment — tested, no clean bridge (the crux blocker)
+- Dialogue records in the script section are **position-prefixed** (small coord/index bytes
+  before each run), NOT length-prefixed (1/702 runs matched a preceding length word).
+- `.CAT` asset names match PC scene names, BUT `RD*.SD4` scripts do **not** reference asset
+  filenames (0/30 sampled) — assets are referenced by index/ID, not name. So the asset-name
+  bridge to PC `(scene,num)` does not work.
+- Remaining alignment options are fuzzy/uncertain: order-matching dialogue sequences per
+  screen against the PC English, or a hand-built screen→scene map. Neither proven.
+
+**Assessment:** extracting the Japanese *text* is feasible; producing a *slot-aligned* ja.dtr
+keyed by PC `(scene,num)` is a hard, uncertain, multi-session effort with no reference.
+Pragmatic alternative: machine-translate EN→JA now for a working 日文 mode (kDispJA reserved),
+and keep Sega CD official-Japanese as a dedicated future project using these notes.
+
 ## Next steps
 - Parse the `0x10000+` script section: find the record delimiter for dialogue (look for a
   consistent op byte preceding each Shift-JIS run; the per-run leading control bytes seen
