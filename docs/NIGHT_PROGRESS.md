@@ -80,3 +80,9 @@
   （1110/2384 句）→ 德文乾淨可讀（實機驗證 de_fixed.png）。三個 bundle 全更新含修復。
 - 04:40 — **4 模式 showcase**：`screenshots/showcase/four_modes.png`（同句 EN/ZH24/ZH16/DE 並排）
   放上 README。另確認：inventory 無 text item → 不會 crash（安全）；Mega-CD BIOS 全系統查無（動態日文需你提供）。
+- 04:50 — **`dlg` autopilot 指令（引擎新增）✅**：`dlg <num>`→`SDSScene::showDialog`，可直接
+  渲染任一 (scene,num) 對白，不必靠 look 命中熱區。解開逐句中文 QA。場景5實擷四句不同台詞
+  （`screenshots/showcase/dialogue_gallery.png`），全部乾淨。已重 build 引擎、更新 patch。
+  限制：非預設場景的 changeScene 載入不穩（"draw image 0 not loaded"），多場景 gallery 尚不可靠
+  —— dlg 指令本身正確，瓶頸在 autopilot 換場景。場景5（預設載入）穩定可用。
+- 04:55 — macOS build recipe（`scripts/build_macos.sh`）；Phase 5 三平台齊（Linux 驗證/Win 交叉/Mac recipe）。
