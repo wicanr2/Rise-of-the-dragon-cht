@@ -51,10 +51,15 @@ def render_glyph(face, ch, width, height, bpr):
         return out
     bmp = face.glyph.bitmap
     bw, bh, pitch = bmp.width, bmp.rows, bmp.pitch
-    # position: left = bitmap_left, top baseline ~ size*0.8; center if smaller
-    top = face.size.ascender >> 6
-    ox = max(0, face.glyph.bitmap_left)
-    oy = top - face.glyph.bitmap_top
+    if height > 14:
+        # CJK hi-res: center the ink in the cell (full-width, balanced look)
+        ox = max(0, (width - bw) // 2)
+        oy = max(0, (height - bh) // 2)
+    else:
+        # small bitmap font: baseline-position
+        top = face.size.ascender >> 6
+        ox = max(0, face.glyph.bitmap_left)
+        oy = top - face.glyph.bitmap_top
     # clamp into cell
     for ry in range(bh):
         ty = oy + ry
