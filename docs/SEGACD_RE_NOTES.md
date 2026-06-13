@@ -175,6 +175,20 @@ Conclusion: RISE.BIN is the sub-CPU PROGRAM binary, not the font. The JP font is
 an interior offset (a .CAT or a sub-region). Without the dynamic VRAM ground-truth (BIOS-blocked),
 locating it statically remains the hard open problem. Renders kept local only (copyrighted glyphs).
 
+## RISE.BIN font question — RESOLVED as NEGATIVE (overnight, definitive)
+Tested whether RISE.BIN is the JP font, thoroughly:
+- Ink-distribution test looked font-like (1628 blank 32B-cells, mean ink 33%, spread 30-60%).
+  BUT that signature is ALSO produced by 68000 program code + zero-padding regions.
+- Rendered RISE.BIN at offset 0 in **7+ glyph layouts** — 16×16 linear (MSB/LSB), 4×(8×8) tiles
+  in orders {TL,TR,BL,BR}/{TL,BL,TR,BR} (1bpp & 4bpp), left/right 8×16 half-columns, 8×16 — 
+  **every one is noise, no recognizable kana/kanji.**
+- Conclusion: RISE.BIN is the **sub-CPU program** (matches the name + the gdb crash context
+  `scd_update→m68k_run`), NOT the font. The font is elsewhere (compressed, non-32-aligned, or
+  only materialized in VRAM at runtime). It is NOT locatable by static layout-guessing.
+- **The font format is best cracked DYNAMICALLY**: dump VRAM after a JP text screen (font tiles
+  appear in VRAM in known VDP 4bpp format), then match back to a disc file to learn the static
+  encoding. This is BIOS-gated (see blocker above). Static font search is closed until then.
+
 ## Honest ROI assessment (2026-06)
 The official-Japanese extraction is the single hardest, least-certain part of the whole
 project: no ScummVM reference engine, custom (non-SJIS, non-JIS-index) encoding, script-opcode
