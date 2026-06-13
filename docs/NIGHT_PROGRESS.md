@@ -1,14 +1,33 @@
-# 夜間自動推進進度 (2026-06-14 01:00 → 07:00)
+# 夜間自動推進進度 (2026-06-14 凌晨)
 
-使用者就寢，授權自動推進兩條線到早上 7 點。本檔即時記錄成果，醒來可一次讀完。
-原則：不問問題、合理決策即執行並記錄理由、邊做邊 commit、不污染 host（工具裝 Docker）、
-不把任何受版權資料（CHD/BIOS/遊戲檔）入 git。
+使用者就寢，授權自動推進到早上 7 點。原則：不問問題、合理決策即執行並記錄、邊做邊 commit、
+不污染 host（工具裝 Docker）、不把受版權資料（CHD/BIOS/遊戲檔）入 git。
 
-## 兩條線
-- **Track A — Sega CD 官方日文（動態分析）**：BIOS 已找到（`mpr-18100.bin` 日版），Docker 內建
-  Genesis Plus GX 核心 → headless 跑日版 → dump VRAM 抽字型 tile → OCR → index→字元。
-- **Track B — 中文版 ship（解鎖中、主交付）**：Phase 5 打包（Linux bundle/AppImage）+ Phase 4
-  逐場景排版 QA。
+## ★ 醒來先看這裡 ★
+
+**成果**
+| 項目 | 狀態 |
+|---|---|
+| **Linux** AppImage + tar.gz | ✅ 實機 headless 驗證渲染中文（`dist/`） |
+| **Windows** zip（mingw 交叉編譯）| ✅ build 健全（27.5MB exe，僅需 SDL2.dll）；待實機驗證 |
+| macOS | ⬜ 需 macOS host（未做） |
+| **全 2386 句翻譯品質稽核** | ✅ 完整/一致(孟波×459)/語氣/無溢出/無內容遺失 全過 |
+| 排版 QA（場景5・四模式並排）| ✅ `screenshots/showcase/four_modes.png` |
+| **德文 umlaut 修復** | ✅ ä/ö/ü/ß→ae/oe/ue/ss（1110 句），德文乾淨可讀 |
+| inventory 穩定性 | ✅ 無 text item，不會 crash |
+| Sega CD 官方日文 | 🚧 動態 harness 就緒，**硬卡缺 Mega-CD BIOS** |
+
+**你的待辦**
+1. 實機 Windows 測 `dist/rotd-cht-windows-x86_64.zip`（本機 wine 連 hello.exe 都跑不動，無法驗）。
+2. 要官方日文 → 放一顆 **Mega-CD BIOS**（128KB boot ROM）到 `/home/anr2/emulator/bios/`，
+   再跑 `tools/segacd_emu_run.sh <biosname> 1800 60` 即可 render 日版→OCR。（系統現有的全是 Saturn BIOS。）
+3. commits 都在**本地、未 push**；review 後再 push。
+
+---
+
+## 兩條線（夜間起始規劃）
+- **Track A — Sega CD 官方日文**：原想動態跑日版抽日文，後發現缺 Mega-CD BIOS 而硬卡（見下）。
+- **Track B — 中文版 ship**：Phase 5 三平台打包 + Phase 4 排版/翻譯 QA。**主要成果在此。**
 
 ## 進度 log（新到舊）
 - 01:04 — 確認時間/環境：JP game(region J) + JP BIOS + Docker 齊備；GPGX 核心背景建置中。
