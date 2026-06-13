@@ -109,6 +109,10 @@ F8 循環 `CJKSupport` 的 `DisplayMode`：英(原始) → 中文24 → 中文16
 - [x] **Docker 內萃取完成**（`tools/extract_segacd.sh`，host 不污染）：CHD → cue/bin → ISO9660 data track（1299 檔）+ 4 條紅皮書 CD 音軌（rotd_02..05.wav）。
 - 已驗證結構：**1010 `.SD4` + 9 `.SD5` + 8 `.SD6`** 場景腳本（`RD*.SD4` 內含 **Shift-JIS 日文對白**，chunk tag `EDA:/ILF:/DFB:`，但 **chunk 不在 offset 0**，前面有 header）、208 `.CAT` 素材、57 `.BIN`、3 `.PCM`（數位語音）、3 `.TXT`。
 - [ ] **RE Sega CD `.SD4` 格式**（與 PC 的 `SDS:` 不同、ScummVM 無此引擎參照 → 全新逆向）→ 抽日文對白 → 對齊 PC `(scene,num)` → `ja.dtr` → 接進 F8 循環（`kDispJA` 已預留）。
+  - 已分析：日文在每個 `RD*.SD4` 約 offset 64K–88K 的密集區（~700+ Shift-JIS 字/檔）。
+  - **難點 1**：字串非單純 null-terminated，內含 control/formatting 控制碼（只有 ~25% run 後接 0x00），要逆出控制碼結構才能乾淨切句。
+  - **難點 2**：Sega CD 用 `RD0101A` 螢幕編號，與 PC `(scene,num)` 不同系統，對齊需另解。
+  - 這是一塊獨立的深度逆向（規模等同當初逆 PC SDS + 額外的對齊問題），不確定性高。
 - [ ] **語音/音軌**：4 條 CD 音軌（音樂）+ `.PCM`（語音）評估整合（PC 版原無語音，屬大型未來功能）。
 
 ### Phase 5 — 打包
