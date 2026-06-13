@@ -46,6 +46,27 @@ keyed by PC `(scene,num)` is a hard, uncertain, multi-session effort with no ref
 Pragmatic alternative: machine-translate EN→JA now for a working 日文 mode (kDispJA reserved),
 and keep Sega CD official-Japanese as a dedicated future project using these notes.
 
+## CRITICAL: text is custom-encoded, not Shift-JIS
+- Decoding the dense `RD*.SD4` text region as Shift-JIS yields kanji + katakana but
+  **zero hiragana** — impossible for real Japanese prose (which is hiragana-heavy). So the
+  bytes are NOT SJIS; the dialogue is stored as **glyph indices into the game's own
+  Japanese font** (standard practice for Sega CD JP games). The user's translate-and-match
+  alignment idea still applies, but FIRST the text must be decoded from the custom encoding.
+- `RE*.SD4/.SD5/.SD6` (×237) are a second variant set — NOT English (no English phrases),
+  so no English-bridge shortcut.
+- **Font candidate: `RISE.BIN` = 196608 B = 6144 × 32 B** = a 16×16 1bpp glyph table
+  (6144 glyphs ≈ full JIS X 0208 set), 65% ink (consistent with a bitmap font). First-pass
+  16×16 linear render didn't resolve into clean glyphs → wrong bit/plane order, or compressed.
+
+## Decode roadmap (multi-week)
+1. Reverse `RISE.BIN` glyph format (bit order / planar? / compression) → render clean 16×16 glyphs.
+2. Determine the index→character mapping:
+   - test JIS X 0208 ku-ten order (glyph N at a known JIS code renders as that char → direct decode), else
+   - render every glyph + Japanese OCR / manual ID to build an index→Unicode table.
+3. Decode `RD*.SD4` dialogue (indices → chars) → per-screen Japanese.
+4. Align via the user's method: machine-translate each JP line → fuzzy-match vs `dialogs_en.json`
+   → assign `(scene,num)` → `translations/ja.json` → `ja.dtr` → wire `kDispJA` (needs JP font in engine).
+
 ## Next steps
 - Parse the `0x10000+` script section: find the record delimiter for dialogue (look for a
   consistent op byte preceding each Shift-JIS run; the per-run leading control bytes seen
