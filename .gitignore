@@ -1,0 +1,23 @@
+# ===== Copyrighted game data — NEVER commit (derivative localization work only) =====
+# Distribution zips
+*.zip
+# Game install dirs (any language)
+game/
+game_en/
+game_de/
+game_*/
+# Extracted game resources (bitmaps, scripts, fonts, songs — all copyrighted)
+extracted/
+extracted_*/
+# Extracted source scripts (copyrighted original text)
+dialogs_en.json
+dialogs_de.json
+dialogs_*.json
+
+# ===== Build artifacts =====
+*.pyc
+__pycache__/
+build/
+scummvm-src/
+scummvm/
+*.AppImage
