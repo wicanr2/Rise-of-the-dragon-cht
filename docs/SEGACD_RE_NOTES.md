@@ -149,6 +149,29 @@ at runtime, giving ground truth (bytes → on-screen glyph). Concrete plan (Dock
 4. Dump the font tiles from VRAM (now we know the base) → render → OCR/JIS-match → index→char.
 This is a substantial new sub-project but it is the only reliable path without a reference engine.
 
+## ★ BREAKTHROUGH (2026-06-14): real Mega-CD BIOS → game BOOTS and RENDERS ★
+User supplied a genuine Mega-CD BIOS set. `megacd_j.bin` = "SEGA MEGA DRIVE (C)SEGA 1991.NOV
+MEGA-CD BOOT ROM ... 1.00p" (JP Model 1). Installed to `/home/anr2/emulator/bios/`.
+`tools/segacd_emu_run.sh megacd_j <frames> <every> frames <input_after>`:
+- **No more segfault.** Boots cleanly: MEGA-CD logo → Japanese "スタートボタンを押して下さい"
+  (**confirms JP text renders!**) → title "Rise of the Dragon / PRESS START BUTTON / ©1992
+  Dynamix" → English credits roll (~48s) → intro cutscene (character portraits, likely VOICED)
+  → interactive gameplay = Blade's apartment (same layout as PC, clock 7/31 12:0x).
+- Resolution 320×224; game palette is green-tinted (cyberpunk). All frames dumped as PPM.
+
+**Remaining blocker = reaching in-game DIALOGUE text.** The SD4 dialogue (speech bubbles, like
+PC) only shows on point-and-click interaction. The harness only presses START (boots/advances
+cutscenes); it does NOT move the cursor, so gameplay look-dialogues aren't triggered. The intro
+cutscene appears voiced (no on-screen text). Options to get the Japanese text:
+  - A) add D-pad cursor + button input to the harness, navigate the apartment, trigger Blade's
+    look-monologue → screenshot → OCR (tesseract-jpn/manga-ocr in Docker).
+  - B) VRAM dump while dialogue shows → glyph tiles (only currently-displayed glyphs fit in 64KB).
+    NOTE: GPGX libretro does not expose RETRO_MEMORY_VIDEO_RAM — needs retro_serialize savestate
+    parsing instead.
+  - C) trace the game's font load from disc (which file/offset it DMAs into VRAM) → that's the
+    full font → decode SD4 indices statically.
+The hard wall (no BIOS) is GONE; what remains is input-scripting / OCR — tractable iteration.
+
 ## Dynamic-analysis harness BUILT — but BIOS-BLOCKED (2026-06-14, overnight)
 Built the full headless pipeline to render the JP disc and OCR the official Japanese
 (sidestepping the SD4 encoding): `tools/segacd_run.c` (libretro frontend) +

@@ -43,6 +43,11 @@ static fn_abatch p_set_audio_sample_batch;
 static fn_ipoll  p_set_input_poll;
 static fn_istate p_set_input_state;
 static fn_loadgame p_load_game;
+typedef void *(*fn_getmem)(unsigned);
+typedef size_t (*fn_getmemsz)(unsigned);
+static fn_getmem   p_get_memory_data;
+static fn_getmemsz p_get_memory_size;
+#define RETRO_MEMORY_VIDEO_RAM 3
 
 static void load_sym(void **dst, const char *name) {
     *dst = dlsym(g_core, name);
@@ -92,12 +97,15 @@ static void input_poll_cb(void) {}
 
 /* Scripted input: press START periodically to advance intro/menus. */
 static unsigned g_frame = 0;
-static unsigned g_input_after = 600; /* let the Sega CD BIOS boot cleanly first */
+static unsigned g_input_after = 1500; /* press START only at/after the title screen */
 static int16_t input_state_cb(unsigned port, unsigned device, unsigned index, unsigned id) {
     if (port != 0 || device != RETRO_DEVICE_JOYPAD) return 0;
     (void)index;
-    /* after BIOS boot, tap START periodically to advance intro/menus */
-    if (g_frame >= g_input_after && id == RETRO_DEVICE_ID_JOYPAD_START && (g_frame % 120) < 5)
+    /* press START only inside a window [input_after, input_after+700] to start the
+     * game past the title/license/loading; then go hands-off so dialogues linger. */
+    if (id == RETRO_DEVICE_ID_JOYPAD_START &&
+        g_frame >= g_input_after && g_frame < g_input_after + 250 &&
+        (g_frame % 80) < 4)
         return 1;
     return 0;
 }
@@ -134,6 +142,7 @@ int main(int argc, char **argv) {
     snprintf(g_system_dir, sizeof g_system_dir, "%s", argv[3]);
     snprintf(g_save_dir, sizeof g_save_dir, "%s", argv[3]);
     unsigned frames = (unsigned)atoi(argv[5]), every = (unsigned)atoi(argv[6]);
+    if (argc >= 8) g_input_after = (unsigned)atoi(argv[7]); /* frame to start pressing START */
 
     g_core = dlopen(core, RTLD_NOW);
     if (!g_core) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 2; }
@@ -149,6 +158,8 @@ int main(int argc, char **argv) {
     load_sym((void **)&p_set_input_poll, "retro_set_input_poll");
     load_sym((void **)&p_set_input_state, "retro_set_input_state");
     load_sym((void **)&p_load_game, "retro_load_game");
+    p_get_memory_data = (fn_getmem)dlsym(g_core, "retro_get_memory_data");
+    p_get_memory_size = (fn_getmemsz)dlsym(g_core, "retro_get_memory_size");
     load_sym((void **)&p_unload_game, "retro_unload_game");
     load_sym((void **)&p_run, "retro_run");
 
@@ -188,6 +199,18 @@ int main(int argc, char **argv) {
     }
     snprintf(path, sizeof path, "%s/frame_final.ppm", outdir);
     dump_ppm(path);
+
+    /* Dump VRAM (font tiles live here once the game loads them) for static decoding. */
+    if (p_get_memory_data && p_get_memory_size) {
+        void *vram = p_get_memory_data(RETRO_MEMORY_VIDEO_RAM);
+        size_t vsz = p_get_memory_size(RETRO_MEMORY_VIDEO_RAM);
+        fprintf(stderr, "VRAM: data=%p size=%zu\n", vram, vsz);
+        if (vram && vsz) {
+            snprintf(path, sizeof path, "%s/vram.bin", outdir);
+            FILE *vf = fopen(path, "wb");
+            if (vf) { fwrite(vram, 1, vsz, vf); fclose(vf); fprintf(stderr, "wrote %s\n", path); }
+        }
+    }
     fprintf(stderr, "done: %u frames, last fb %ux%u\n", frames, g_w, g_h);
     p_unload_game();
     p_deinit();
