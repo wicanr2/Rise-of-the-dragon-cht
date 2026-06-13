@@ -10,10 +10,11 @@
 |---|---|
 | **Linux** AppImage + tar.gz | ✅ 實機 headless 驗證渲染中文（`dist/`） |
 | **Windows** zip（mingw 交叉編譯）| ✅ build 健全（27.5MB exe，僅需 SDL2.dll）；待實機驗證 |
-| macOS | ⬜ 需 macOS host（未做） |
+| **macOS** | 📄 native build recipe（`scripts/build_macos.sh`，需在 Mac 上跑） |
 | **全 2386 句翻譯品質稽核** | ✅ 完整/一致(孟波×459)/語氣/無溢出/無內容遺失 全過 |
-| 排版 QA（場景5・四模式並排）| ✅ `screenshots/showcase/four_modes.png` |
+| 排版 QA showcase | ✅ `four_modes.png`（四模式）+ `dialogue_gallery.png`（場景5 四句） |
 | **德文 umlaut 修復** | ✅ ä/ö/ü/ß→ae/oe/ue/ss（1110 句），德文乾淨可讀 |
+| **`dlg` autopilot 指令** | ✅ 直接渲染任一 (scene,num) 對白，解開逐句 QA |
 | inventory 穩定性 | ✅ 無 text item，不會 crash |
 | Sega CD 官方日文 | 🚧 動態 harness 就緒，**硬卡缺 Mega-CD BIOS** |
 
