@@ -167,6 +167,14 @@ NO 128KB Mega-CD BIOS. Cannot legally download it.
 the JP disc — mpr-14088/mpr-15045/etc.) into `/home/anr2/emulator/bios/`, then
 `tools/segacd_emu_run.sh <biosname> 1800 60` renders frames → OCR pipeline. The harness is ready.
 
+
+## Static font render attempt (RISE.BIN) — negative (overnight)
+Rendered RISE.BIN (196608 B = 6144x32 or 1536x128, entropy 5.50 = structured) at offset 0 as
+1bpp-16x16 (MSB/LSB), 4bpp-8x8 tiles, and 4bpp-16x16 (TL/TR/BL/BR) -> all NOISE, no glyph grid.
+Conclusion: RISE.BIN is the sub-CPU PROGRAM binary, not the font. The JP font is elsewhere / at
+an interior offset (a .CAT or a sub-region). Without the dynamic VRAM ground-truth (BIOS-blocked),
+locating it statically remains the hard open problem. Renders kept local only (copyrighted glyphs).
+
 ## Honest ROI assessment (2026-06)
 The official-Japanese extraction is the single hardest, least-certain part of the whole
 project: no ScummVM reference engine, custom (non-SJIS, non-JIS-index) encoding, script-opcode
