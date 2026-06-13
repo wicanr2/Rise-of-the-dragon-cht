@@ -90,6 +90,24 @@
 - [ ] 人工潤飾關鍵劇情對白
 - [ ] 乾淨的對話泡泡截圖（headless 觸發 look 互動不穩，待更可靠的輸入腳本或實機）
 
+### Phase 6 — 多模式顯示切換（使用者指定，待實作）
+一個按鍵（**F8**；F7 已是 ScummVM 的 Load，不能用）循環「顯示模式」= (語言, 字級)：
+
+| 模式 | 語言來源 | 字型 | 備註 |
+|---|---|---|---|
+| 英文（原始）| 遊戲本身 | DRAGON.FNT | overlay 關閉 |
+| 中文 24×24 | `zh.dtr` | `dragon_zh24.dcjk` | 現況 |
+| 中文 16×16 | `zh.dtr` | `dragon_zh16.dcjk`（新增）| 較小、較貼近原排版 |
+| 日文 | `ja.dtr`（Sega CD 萃取）| JP 字型 | 見下 |
+| 德文 | **獨立遊戲**（德版 VOLUME）| DRAGON.FNT | 特例：德文是另一套遊戲檔，非 overlay。要嘛跑德版遊戲、要嘛把德文做成 `de.dtr` 疊在英版上（待確認）|
+
+實作：`CJKSupport` 改持有多顆字型（24/16）+ 多個 overlay（zh/ja），mode enum 循環；`flushDeferred` 用當前 mode 的字型/overlay。需 `build_cjk_font.py --size 16`。
+
+### Phase 7 — 日文版（Sega CD）
+來源：`Rise of the Dragon (Japan).chd`（Sega CD，**本地保留、不入 git**）。
+- 萃取 CHD → cue/bin → data track（Sega CD DGDS 變體）→ 抽日文劇本 → `ja.dtr`（日文正確翻譯以此為準）。
+- **語音 + CD 音軌**：Sega CD 版有數位語音與紅皮書音軌；評估能否把語音對應到對話、音軌當配樂（大型未來功能，PC 版原本無語音）。
+
 ### Phase 5 — 打包
 - [ ] Linux：patched ScummVM → AppImage
 - [ ] Windows：交叉編譯 → zip
