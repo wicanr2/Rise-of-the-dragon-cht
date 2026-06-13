@@ -24,3 +24,11 @@ scummvm/
 *.dcjk
 fonts/*.dcjk
 ui_skeleton.json
+autopilot.txt
+autopilot_shots/
+# Sega CD / disc images (copyrighted game data)
+*.chd
+*.bin
+*.cue
+*.iso
+*.7z

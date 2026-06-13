@@ -1,3 +1,157 @@
+diff --git a/engines/dgds/autopilot.cpp b/engines/dgds/autopilot.cpp
+new file mode 100644
+index 00000000..fc4d8ebb
+--- /dev/null
++++ b/engines/dgds/autopilot.cpp
+@@ -0,0 +1,89 @@
++/* ScummVM dgds autopilot (ROTD CHT). See autopilot.h. */
++
++#include "common/file.h"
++#include "common/tokenizer.h"
++#include "common/debug.h"
++#include "dgds/autopilot.h"
++#include "dgds/dgds.h"
++#include "dgds/scene.h"
++
++namespace Dgds {
++
++bool Autopilot::load(const Common::String &path) {
++	Common::File f;
++	if (!f.open(Common::Path(path)))
++		return false;
++	while (!f.eos()) {
++		Common::String line = f.readLine();
++		line.trim();
++		if (line.empty() || line[0] == '#')
++			continue;
++		Common::StringTokenizer tok(line, " \t");
++		Common::String op = tok.nextToken();
++		Common::String a = tok.nextToken();
++		Cmd c;
++		c.arg = a.empty() ? 0 : atoi(a.c_str());
++		c.name = a;
++		if (op == "scene") c.op = 's';
++		else if (op == "use") c.op = 'u';
++		else if (op == "look") c.op = 'l';
++		else if (op == "shot") c.op = 'p';
++		else if (op == "wait") c.op = 'w';
++		else if (op == "lang") c.op = 'g';
++		else if (op == "quit") c.op = 'q';
++		else continue;
++		_cmds.push_back(c);
++	}
++	_active = !_cmds.empty();
++	debug(1, "Autopilot: loaded %d commands from %s", (int)_cmds.size(), path.c_str());
++	return _active;
++}
++
++void Autopilot::tick(DgdsEngine *engine) {
++	if (!_active)
++		return;
++	if (_wait > 0) {
++		_wait--;
++		return;
++	}
++	if (_pc >= _cmds.size()) {
++		engine->quitGame();
++		return;
++	}
++	const Cmd &c = _cmds[_pc++];
++	switch (c.op) {
++	case 's': // scene N
++		engine->autopilotDismissIntro();
++		engine->changeScene(c.arg);
++		_wait = 30; // let the scene's enter ops / first frame settle
++		break;
++	case 'u': // use hotspot M
++		if (engine->getScene())
++			engine->getScene()->triggerHotAreaUse((uint16)c.arg);
++		_wait = 25; // let the dialogue render
++		break;
++	case 'l': // look at hotspot M (runs onLookOps -> description dialogue)
++		if (engine->getScene())
++			engine->getScene()->triggerHotAreaLook((uint16)c.arg);
++		_wait = 25;
++		break;
++	case 'p': // screenshot
++		engine->saveShot(c.name);
++		_wait = 1;
++		break;
++	case 'g': // set language/display mode (0=orig EN, 1=中文)
++		engine->getCJK().setLang((CJKLang)c.arg);
++		_wait = 3;
++		break;
++	case 'w':
++		_wait = c.arg;
++		break;
++	case 'q':
++		engine->quitGame();
++		break;
++	default:
++		break;
++	}
++}
++
++} // namespace Dgds
+diff --git a/engines/dgds/autopilot.h b/engines/dgds/autopilot.h
+new file mode 100644
+index 00000000..16d0eb13
+--- /dev/null
++++ b/engines/dgds/autopilot.h
+@@ -0,0 +1,53 @@
++/* ScummVM dgds autopilot — a script-driven "special mode" for headless
++ * localization QA / game-testing. Non-upstream (ROTD CHT).
++ *
++ * Reusable pattern for ScummVM AVG localization projects: instead of driving
++ * the game from outside with synthetic mouse events (which fights the intro
++ * state machine), the engine reads a small text script and drives ITSELF —
++ * jumping scenes, invoking hotspot ops directly by number, and writing PNG
++ * screenshots of the final (post-scale, with CJK) framebuffer. This exercises
++ * every dialogue deterministically so the translated text can be reviewed.
++ *
++ * Enabled when an `autopilot.txt` script exists in the search path.
++ * Script commands (one per line):
++ *   scene <N>        jump to scene N (dismisses the intro menu)
++ *   use <M>          trigger hot-area M's onUse ops in the current scene
++ *   shot <name>      write autopilot_shots/<name>.png (640x400, crisp CJK)
++ *   wait <frames>    idle N frames (let a dialogue settle)
++ *   quit             end the run
++ */
++
++#ifndef DGDS_AUTOPILOT_H
++#define DGDS_AUTOPILOT_H
++
++#include "common/array.h"
++#include "common/str.h"
++
++namespace Dgds {
++
++class DgdsEngine;
++
++class Autopilot {
++public:
++	// Load the script if it exists; returns true and activates autopilot mode.
++	bool load(const Common::String &path);
++	bool isActive() const { return _active; }
++
++	// Called once per main-loop frame (after the frame is presented).
++	void tick(DgdsEngine *engine);
++
++private:
++	struct Cmd {
++		char op;            // 's'cene 'u'se 'p'hoto 'w'ait 'q'uit
++		int arg;
++		Common::String name;
++	};
++	Common::Array<Cmd> _cmds;
++	uint _pc = 0;
++	int _wait = 0;
++	bool _active = false;
++};
++
++} // namespace Dgds
++
++#endif
 diff --git a/engines/dgds/cjk.cpp b/engines/dgds/cjk.cpp
 new file mode 100644
 index 00000000..36cbb883
@@ -343,10 +497,19 @@ index 00000000..366d2a0c
 +
 +#endif
 diff --git a/engines/dgds/dgds.cpp b/engines/dgds/dgds.cpp
-index 63976485..fcd10525 100644
+index 63976485..aa4246cb 100644
 --- a/engines/dgds/dgds.cpp
 +++ b/engines/dgds/dgds.cpp
-@@ -334,7 +334,10 @@ void DgdsEngine::checkDrawInventoryButton() {
+@@ -35,6 +35,8 @@
+ #include "graphics/cursorman.h"
+ #include "graphics/font.h"
+ #include "graphics/managed_surface.h"
++#include "graphics/paletteman.h"
++#include "image/png.h"
+ 
+ #include "engines/advancedDetector.h"
+ #include "engines/util.h"
+@@ -334,7 +336,10 @@ void DgdsEngine::checkDrawInventoryButton() {
  void DgdsEngine::init(bool restarting) {
  	if (!restarting) {
  		// Init things with no state only once
@@ -358,7 +521,7 @@ index 63976485..fcd10525 100644
  
  		_console = new Console(this);
  		_resource = new ResourceManager();
-@@ -384,6 +387,40 @@ void DgdsEngine::init(bool restarting) {
+@@ -384,6 +389,60 @@ void DgdsEngine::init(bool restarting) {
  	g_system->fillScreen(0);
  }
  
@@ -396,10 +559,30 @@ index 63976485..fcd10525 100644
 +	g_system->updateScreen();
 +}
 +
++// Autopilot game-tester: write the current 640x400 frame (crisp CJK) to a PNG.
++void DgdsEngine::saveShot(const Common::String &name) {
++	byte palbuf[768];
++	g_system->getPaletteManager()->grabPalette(palbuf, 0, 256);
++	Common::DumpFile outf;
++	if (outf.open(Common::Path("autopilot_shots/" + name + ".png"))) {
++		::Image::writePNG(outf, _hiresBuffer.rawSurface(), palbuf);
++		outf.close();
++		debug(1, "Autopilot shot: %s.png", name.c_str());
++	} else {
++		warning("Autopilot: couldn't write shot %s (does autopilot_shots/ exist?)", name.c_str());
++	}
++}
++
++// Autopilot: dismiss the intro skip/play menu so the scene loop can run.
++void DgdsEngine::autopilotDismissIntro() {
++	if (_menu->menuShown())
++		_menu->hideMenu();
++}
++
  void DgdsEngine::loadGameFiles() {
  	REQFileData invRequestData;
  	REQFileData vcrRequestData;
-@@ -391,6 +428,9 @@ void DgdsEngine::loadGameFiles() {
+@@ -391,6 +450,9 @@ void DgdsEngine::loadGameFiles() {
  
  	_fontManager->loadFonts(getGameId(), _resource, _decompressor);
  
@@ -409,7 +592,7 @@ index 63976485..fcd10525 100644
  	switch (getGameId()) {
  	case GID_DRAGON:
  		if (getPlatform() == Common::kPlatformDOS)
-@@ -487,6 +527,22 @@ void DgdsEngine::loadGameFiles() {
+@@ -487,6 +549,22 @@ void DgdsEngine::loadGameFiles() {
  
  	debug(1, "Parsed Inv Request:\n%s", invRequestData.dump().c_str());
  	debug(1, "Parsed VCR Request:\n%s", vcrRequestData.dump().c_str());
@@ -432,7 +615,7 @@ index 63976485..fcd10525 100644
  }
  
  void DgdsEngine::loadRestartFile() {
-@@ -530,6 +586,14 @@ void DgdsEngine::pumpMessages() {
+@@ -530,6 +608,14 @@ void DgdsEngine::pumpMessages() {
  			case kDgdsKeyToggleClock:
  				_clock.toggleVisibleUser();
  				break;
@@ -447,7 +630,7 @@ index 63976485..fcd10525 100644
  			case kDgdsKeyNextChoice:
  				if (_menu->menuShown())
  					_menu->nextChoice();
-@@ -574,7 +638,8 @@ void DgdsEngine::pumpMessages() {
+@@ -574,7 +660,8 @@ void DgdsEngine::pumpMessages() {
  				|| ev.type == Common::EVENT_RBUTTONDOWN || ev.type == Common::EVENT_RBUTTONUP
  				|| ev.type == Common::EVENT_MOUSEMOVE) {
  			_lastMouseEvent = ev.type;
@@ -457,7 +640,17 @@ index 63976485..fcd10525 100644
  			// We can keep going if there were multiple moves or a move then a button, but
  			// stop if there was a button event to process it now.
  			if (_lastMouseEvent != Common::EVENT_MOUSEMOVE)
-@@ -674,6 +739,28 @@ Common::Error DgdsEngine::run() {
+@@ -623,6 +710,9 @@ Common::Error DgdsEngine::run() {
+ 	init(false);
+ 	loadGameFiles();
+ 
++	// ROTD CHT game-tester: if an autopilot.txt script exists, drive the game from it.
++	_autopilot.load("autopilot.txt");
++
+ 	// If a savegame was selected from the launcher, load it now.
+ 	int saveSlot = ConfMan.getInt("save_slot");
+ 	if (saveSlot != -1)
+@@ -674,6 +764,28 @@ Common::Error DgdsEngine::run() {
  		} else {
  			debug(10, "****  Starting frame %d time %d ****", frameCount, _thisFrameMs);
  
@@ -486,7 +679,7 @@ index 63976485..fcd10525 100644
  			bool clearedDlg = _scene->checkForClearedDialogs();
  
  			// Willy pauses script execution when the palette is faded by an active
-@@ -789,7 +876,7 @@ Common::Error DgdsEngine::run() {
+@@ -789,7 +901,7 @@ Common::Error DgdsEngine::run() {
  			bool gameRunning = (!haveActiveDialog && _gameGlobals->getGlobal(0x57));
  			_clock.update(gameRunning && shouldRunScripts);
  
@@ -495,28 +688,33 @@ index 63976485..fcd10525 100644
  
  			_justChangedScene1 = false;
  		}
-@@ -807,7 +894,7 @@ Common::Error DgdsEngine::run() {
+@@ -807,7 +919,11 @@ Common::Error DgdsEngine::run() {
  				CursorMan.showMouse(false);
  		}
  
 -		g_system->updateScreen();
 +		vUpdateScreen();
++
++		// ROTD CHT game-tester: advance the autopilot script after the frame is shown.
++		if (_autopilot.isActive())
++			_autopilot.tick(this);
  
  		//
  		// Limit frame rate to 15 FPS
 diff --git a/engines/dgds/dgds.h b/engines/dgds/dgds.h
-index 1eedfb4d..bd3ba9da 100644
+index 1eedfb4d..5b09063b 100644
 --- a/engines/dgds/dgds.h
 +++ b/engines/dgds/dgds.h
-@@ -36,6 +36,7 @@
+@@ -36,6 +36,8 @@
  #include "dgds/resource.h"
  #include "dgds/clock.h"
  #include "dgds/menu.h"
 +#include "dgds/cjk.h"
++#include "dgds/autopilot.h"
  
  
  namespace Dgds {
-@@ -92,6 +93,7 @@ enum DgdsKeyEvent {
+@@ -92,6 +94,7 @@ enum DgdsKeyEvent {
  	kDgdsKeyPickUp,
  	kDgdsKeyLook,
  	kDgdsKeyActivate,
@@ -524,7 +722,7 @@ index 1eedfb4d..bd3ba9da 100644
  };
  
  enum DgdsMouseCursor {
-@@ -121,6 +123,10 @@ class DgdsEngine : public Engine {
+@@ -121,6 +124,10 @@ class DgdsEngine : public Engine {
  public:
  	Sound *_soundPlayer;
  	Graphics::ManagedSurface _compositionBuffer;
@@ -535,15 +733,16 @@ index 1eedfb4d..bd3ba9da 100644
  
  	static const byte HOC_CHAR_SWAP_ICONS[];
  
-@@ -156,6 +162,7 @@ private:
+@@ -156,6 +163,8 @@ private:
  	ChinaTrain *_chinaTrain;
  
  	FontManager *_fontManager;
 +	CJKSupport _cjk; // ROTD CHT: translation overlay + Big5 font + language switch
++	Autopilot _autopilot; // ROTD CHT: script-driven game-tester mode
  	Common::SharedPtr<Image> _corners;
  	Common::SharedPtr<Image> _icons;
  
-@@ -214,6 +221,15 @@ public:
+@@ -214,6 +223,19 @@ public:
  	SDSScene *getScene() { return _scene; }
  	GDSScene *getGDSScene() { return _gdsScene; }
  	const FontManager *getFontMan() const { return _fontManager; }
@@ -556,6 +755,10 @@ index 1eedfb4d..bd3ba9da 100644
 +	void vCopyRectToScreen(const void *buf, int pitch, int x, int y, int w, int h);
 +	void vUpdateScreen();
 +	void present2x();
++
++	// Autopilot (game-tester) support.
++	void saveShot(const Common::String &name); // PNG of the current 640x400 frame
++	void autopilotDismissIntro();               // hide the intro menu so a scene can run
  	const Common::SharedPtr<Image> &getUICorners() { return _corners; }
  	const Common::SharedPtr<Image> &getIcons() { return _icons; }
  	GamePalettes *getGamePals() { return _gamePals; }
@@ -764,13 +967,14 @@ index 0ef2da51..6e5c5725 100644
  
  	Common::Keymap *map = new Common::Keymap(Common::Keymap::kKeymapTypeGame, target, _("Game Keys"));
 diff --git a/engines/dgds/module.mk b/engines/dgds/module.mk
-index 2dc84cdb..4f7a700c 100644
+index 2dc84cdb..42346018 100644
 --- a/engines/dgds/module.mk
 +++ b/engines/dgds/module.mk
-@@ -2,6 +2,7 @@ MODULE := engines/dgds
+@@ -2,6 +2,8 @@ MODULE := engines/dgds
  
  MODULE_OBJS := \
  	ads.o \
++	autopilot.o \
 +	cjk.o \
  	clock.o \
  	console.o \
@@ -828,7 +1032,7 @@ index 60bff928..575b323e 100644
  			dst->hLine(hleft - 3, htop, hright, boxTopColor);
  			dst->vLine(hright, htop + 1, hbottom, boxTopColor);
 diff --git a/engines/dgds/scene.cpp b/engines/dgds/scene.cpp
-index a83096e7..7c4a359c 100644
+index a83096e7..1893f8ff 100644
 --- a/engines/dgds/scene.cpp
 +++ b/engines/dgds/scene.cpp
 @@ -521,6 +521,7 @@ _mouseDownArea(nullptr), _mouseDownCounter(0) {
@@ -839,6 +1043,51 @@ index a83096e7..7c4a359c 100644
  	Common::SeekableReadStream *sceneFile = resourceManager->getResource(filename);
  	if (!sceneFile)
  		error("Scene file %s not found", filename.c_str());
+@@ -1403,6 +1404,29 @@ void SDSScene::bothButtonAction(const Common::Point &pt) {
+ 	}
+ }
+ 
++void SDSScene::triggerHotAreaUse(uint16 num) {
++	for (const HotArea &h : _hotAreaList) {
++		if (h._num == num) {
++			leftButtonAction(&h);
++			return;
++		}
++	}
++	warning("Autopilot: hot area %d not found in scene %d", num, _num);
++}
++
++void SDSScene::triggerHotAreaLook(uint16 num) {
++	// dismiss any lingering dialogue so each captured look starts clean
++	for (Dialog &d : _dialogs)
++		d.clearFlag(kDlgFlagVisible);
++	for (const HotArea &h : _hotAreaList) {
++		if (h._num == num) {
++			runOps(h.onLookOps); // the look-descriptions live here (not wired to input)
++			return;
++		}
++	}
++	warning("Autopilot: hot area %d not found in scene %d (look)", num, _num);
++}
++
+ void SDSScene::leftButtonAction(const HotArea *area) {
+ 	if (!area)
+ 		return;
+diff --git a/engines/dgds/scene.h b/engines/dgds/scene.h
+index 29ca00a6..895b57ba 100644
+--- a/engines/dgds/scene.h
++++ b/engines/dgds/scene.h
+@@ -300,6 +300,10 @@ public:
+ 
+ 	const Common::List<HotArea> &getHotAreas() const { return _hotAreaList; }
+ 
++	// ROTD CHT game-tester: directly trigger a hot-area's onUse / onLook ops by number.
++	void triggerHotAreaUse(uint16 num);
++	void triggerHotAreaLook(uint16 num);
++
+ 	const GameItem *getDragItem() const { return _dragItem; }
+ 	GameItem *getDragItem() { return _dragItem; }
+ 	void setDragItem(GameItem *item) { _dragItem = item; }
 diff --git a/engines/dgds/ttm.cpp b/engines/dgds/ttm.cpp
 index 36ed1bc4..bd4f836a 100644
 --- a/engines/dgds/ttm.cpp
