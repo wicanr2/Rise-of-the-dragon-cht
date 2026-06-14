@@ -1186,10 +1186,18 @@ index 29ca00a6..895b57ba 100644
  	GameItem *getDragItem() { return _dragItem; }
  	void setDragItem(GameItem *item) { _dragItem = item; }
 diff --git a/engines/dgds/ttm.cpp b/engines/dgds/ttm.cpp
-index 36ed1bc4..bd4f836a 100644
+index 36ed1bc4..3d772db9 100644
 --- a/engines/dgds/ttm.cpp
 +++ b/engines/dgds/ttm.cpp
-@@ -269,9 +269,9 @@ static void _copyRectToScreen(const Graphics::ManagedSurface &src, const Common:
+@@ -27,6 +27,7 @@
+ #include "dgds/ttm.h"
+ #include "dgds/ads.h"
+ #include "dgds/dgds.h"
++#include "dgds/cjk.h"
+ #include "dgds/game_palettes.h"
+ #include "dgds/includes.h"
+ #include "dgds/image.h"
+@@ -269,9 +270,9 @@ static void _copyRectToScreen(const Graphics::ManagedSurface &src, const Common:
  	copyRect.clip(Common::Rect(SCREEN_WIDTH, SCREEN_HEIGHT));
  	if (copyRect.isEmpty())
  		return;
@@ -1201,7 +1209,7 @@ index 36ed1bc4..bd4f836a 100644
  }
  
  static void _dissolveToScreen(const Graphics::ManagedSurface &src, const Common::Rect &r) {
-@@ -282,7 +282,7 @@ static void _dissolveToScreen(const Graphics::ManagedSurface &src, const Common:
+@@ -282,7 +283,7 @@ static void _dissolveToScreen(const Graphics::ManagedSurface &src, const Common:
  	uint16 mask = 0x40, stepNr = 0;
  	Common::Rect pixelRect;
  
@@ -1210,7 +1218,7 @@ index 36ed1bc4..bd4f836a 100644
  
  	do {
  		mask = (mask & 1) ? (mask >> 1) ^ 0xB400 : mask >> 1;
-@@ -294,15 +294,15 @@ static void _dissolveToScreen(const Graphics::ManagedSurface &src, const Common:
+@@ -294,15 +295,15 @@ static void _dissolveToScreen(const Graphics::ManagedSurface &src, const Common:
  		if (!pixelRect.isEmpty())
  			surf->copyRectToSurface(src.rawSurface(), pixelRect.left, pixelRect.top, pixelRect);
  		if ((stepNr & 0x3FF) == 0) {
@@ -1230,7 +1238,7 @@ index 36ed1bc4..bd4f836a 100644
  }
  
  static void _doScroll(Graphics::ManagedSurface &compBuf, int16 dir, int16 steps, int16 offset) {
-@@ -317,7 +317,7 @@ static void _doScroll(Graphics::ManagedSurface &compBuf, int16 dir, int16 steps,
+@@ -317,7 +318,7 @@ static void _doScroll(Graphics::ManagedSurface &compBuf, int16 dir, int16 steps,
  	// Example uses:
  	// Heart of China bar scene (scroll left-to-right and right-to-left)
  	//
@@ -1239,7 +1247,7 @@ index 36ed1bc4..bd4f836a 100644
  	Graphics::Surface screenCopy;
  
  	screenCopy.copyFrom(*screen);
-@@ -365,12 +365,12 @@ static void _doScroll(Graphics::ManagedSurface &compBuf, int16 dir, int16 steps,
+@@ -365,12 +366,12 @@ static void _doScroll(Graphics::ManagedSurface &compBuf, int16 dir, int16 steps,
  			error("TTM scroll invalid scroll direction: %d", dir);
  			break;
  		}
@@ -1256,7 +1264,7 @@ index 36ed1bc4..bd4f836a 100644
  	screenCopy.free();
  }
  
-@@ -395,7 +395,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
+@@ -395,7 +396,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
  
  	case 0xa020:
  		_copyRectToScreen(_vm->_compositionBuffer, r);
@@ -1265,7 +1273,7 @@ index 36ed1bc4..bd4f836a 100644
  		break;
  
  	case 0xa040:	// Interlaced effect
-@@ -408,7 +408,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
+@@ -408,7 +409,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
  				yoffset += 10;
  			}
  			if (i % 3 == 0)
@@ -1274,7 +1282,7 @@ index 36ed1bc4..bd4f836a 100644
  		}
  		break;
  
-@@ -423,7 +423,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
+@@ -423,7 +424,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
  			}
  			_copyRectToScreen(_vm->_compositionBuffer, Common::Rect(Common::Point(r.left + x, r.top), 3, r.height()));
  			if (i % 10 == 0)
@@ -1283,7 +1291,7 @@ index 36ed1bc4..bd4f836a 100644
  		}
  		break;
  
-@@ -438,7 +438,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
+@@ -438,7 +439,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
  			}
  			_copyRectToScreen(_vm->_compositionBuffer, Common::Rect(Common::Point(r.left, r.top + y), r.width(), 3));
  			if (i % 10 == 0)
@@ -1292,7 +1300,7 @@ index 36ed1bc4..bd4f836a 100644
  		}
  		break;
  
-@@ -478,7 +478,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
+@@ -478,7 +479,7 @@ void TTMInterpreter::doWipeOp(uint16 code, const TTMEnviro &env, const TTMSeq &s
  				_copyRectToScreen(_vm->_compositionBuffer, Common::Rect(Common::Point(xinside, yinside), width, height));
  			}
  			if (i % 10 == 0)
@@ -1301,7 +1309,7 @@ index 36ed1bc4..bd4f836a 100644
  		} while( true );
  
  		break;
-@@ -624,7 +624,7 @@ void TTMInterpreter::doFadeOutOp(int16 colorno, int16 ncolors, int16 targetcol,
+@@ -624,7 +625,7 @@ void TTMInterpreter::doFadeOutOp(int16 colorno, int16 ncolors, int16 targetcol,
  		for (int i = 0; i < 320; i += speed) {
  			int fade = MIN(i / 5, 63);
  			_vm->getGamePals()->setFade(colorno, ncolors, targetcol, fade * 4);
@@ -1310,7 +1318,7 @@ index 36ed1bc4..bd4f836a 100644
  			g_system->delayMillis(5);
  		}
  
-@@ -640,8 +640,8 @@ void TTMInterpreter::doFadeOutOp(int16 colorno, int16 ncolors, int16 targetcol,
+@@ -640,8 +641,8 @@ void TTMInterpreter::doFadeOutOp(int16 colorno, int16 ncolors, int16 targetcol,
  		_vm->getBackgroundBuffer().fillRect(Common::Rect(SCREEN_WIDTH, SCREEN_HEIGHT), 0);
  	} else {
  		// In Willy Beamish, copy comp->screen and comp->back
@@ -1321,7 +1329,7 @@ index 36ed1bc4..bd4f836a 100644
  		_vm->getBackgroundBuffer().blitFrom(_vm->_compositionBuffer);
  	}
  	// Stored area is cleared in all games.
-@@ -661,9 +661,9 @@ void TTMInterpreter::doFadeInOp(int16 colorno, int16 ncolors, int16 targetcol, i
+@@ -661,9 +662,9 @@ void TTMInterpreter::doFadeInOp(int16 colorno, int16 ncolors, int16 targetcol, i
  			_vm->getGamePals()->setFade(colorno, ncolors, targetcol, fade * 4);
  			if (i == 320) {
  				// update screen first to make the initial fade-in work
@@ -1333,7 +1341,7 @@ index 36ed1bc4..bd4f836a 100644
  			g_system->delayMillis(5);
  		}
  
-@@ -879,9 +879,9 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
+@@ -879,9 +880,9 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
  		_doScroll(_vm->_compositionBuffer, ivals[0], ivals[1], ivals[2]);
  		// After scroll, we need to store the screen contents into the
  		// stored area buffer, and copy the background to the front?
@@ -1345,3 +1353,23 @@ index 36ed1bc4..bd4f836a 100644
  		_vm->_compositionBuffer.blitFrom(_vm->getStoredAreaBuffer());
  		break;
  	}
+@@ -986,7 +987,18 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
+ 		int width = ivals[2];
+ 		if (width == 0)
+ 			width = SCREEN_WIDTH - ivals[0];
+-		font->drawString(&(_vm->_compositionBuffer), str, ivals[0], ivals[1], width, seq._drawColFG);
++		// ROTD CHT: TTM-drawn player-facing text (computer/videophone/access screens, item
++		// names) goes through here, not the dialog/menu path. Capture + localize via the UI overlay.
++		if (gDebugLevel >= 3 && !str.empty())
++			debug(3, "TTMDRAW: '%s'", str.c_str());
++		CJKSupport &cjk = _vm->getCJK();
++		const Common::String *zhTxt = cjk.isCJK() ? cjk.lookupUI(str) : nullptr;
++		if (zhTxt) {
++			int zw = cjk.stringWidth(*zhTxt, font);
++			cjk.deferLine(ivals[0], ivals[1], zw, seq._drawColFG, *zhTxt, Graphics::kTextAlignLeft, font);
++		} else {
++			font->drawString(&(_vm->_compositionBuffer), str, ivals[0], ivals[1], width, seq._drawColFG);
++		}
+ 		break;
+ 	}
+ 	case 0xa300:
