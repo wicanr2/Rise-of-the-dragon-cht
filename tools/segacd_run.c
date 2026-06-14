@@ -47,6 +47,10 @@ typedef void *(*fn_getmem)(unsigned);
 typedef size_t (*fn_getmemsz)(unsigned);
 static fn_getmem   p_get_memory_data;
 static fn_getmemsz p_get_memory_size;
+typedef bool (*fn_unser)(const void *, size_t);
+typedef size_t (*fn_sersz)(void);
+static fn_unser p_unserialize;
+static fn_sersz p_serialize_size;
 #define RETRO_MEMORY_VIDEO_RAM 3
 
 static void load_sym(void **dst, const char *name) {
@@ -183,6 +187,8 @@ int main(int argc, char **argv) {
     load_sym((void **)&p_load_game, "retro_load_game");
     p_get_memory_data = (fn_getmem)dlsym(g_core, "retro_get_memory_data");
     p_get_memory_size = (fn_getmemsz)dlsym(g_core, "retro_get_memory_size");
+    p_unserialize = (fn_unser)dlsym(g_core, "retro_unserialize");
+    p_serialize_size = (fn_sersz)dlsym(g_core, "retro_serialize_size");
     load_sym((void **)&p_unload_game, "retro_unload_game");
     load_sym((void **)&p_run, "retro_run");
 
@@ -208,6 +214,24 @@ int main(int argc, char **argv) {
     fprintf(stderr, "av: base %ux%u max %ux%u fps %.2f\n",
             av.geometry.base_width, av.geometry.base_height,
             av.geometry.max_width, av.geometry.max_height, av.timing.fps);
+
+    /* If ROTD_STATE is set, load that savestate (must be from the SAME GPGX version).
+     * The core needs a few retro_run() ticks before unserialize is accepted. */
+    const char *statefile = getenv("ROTD_STATE");
+    if (statefile && *statefile && p_unserialize) {
+        for (int w = 0; w < 4; w++) p_run();
+        FILE *sf = fopen(statefile, "rb");
+        if (!sf) { fprintf(stderr, "STATE: cannot open %s\n", statefile); }
+        else {
+            fseek(sf, 0, SEEK_END); long ssz = ftell(sf); fseek(sf, 0, SEEK_SET);
+            void *sbuf = malloc(ssz); fread(sbuf, 1, ssz, sf); fclose(sf);
+            size_t need = p_serialize_size ? p_serialize_size() : 0;
+            fprintf(stderr, "STATE: file=%ld bytes core-expects=%zu\n", ssz, need);
+            bool ok = p_unserialize(sbuf, (size_t)ssz);
+            fprintf(stderr, "STATE: unserialize %s\n", ok ? "OK" : "FAILED (version mismatch?)");
+            free(sbuf);
+        }
+    }
 
     char path[1100];
     for (g_frame = 0; g_frame < frames; g_frame++) {
