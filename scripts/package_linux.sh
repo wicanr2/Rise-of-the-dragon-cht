@@ -41,12 +41,19 @@ cat > "$OUT/rotd-cht.sh" <<'LAUNCH'
 # 遊戲中按 F8 循環顯示模式：英文 / 中文24 / 中文16 / 德文。
 HERE="$(cd "$(dirname "$0")" && pwd)"
 export LD_LIBRARY_PATH="$HERE/lib:${LD_LIBRARY_PATH:-}"
-EXTRA="$HERE/share/rotd-cht"
-if [ $# -ge 1 ]; then
-  exec "$HERE/bin/scummvm" --extrapath="$EXTRA" --path="$1" rise
-else
-  exec "$HERE/bin/scummvm" --extrapath="$EXTRA"
+SV="$HERE/bin/scummvm"; EXTRA="$HERE/share/rotd-cht"
+has_game() { [ -f "$1/volume.vga" ] || [ -f "$1/VOLUME.VGA" ] || [ -f "$1/RESOURCE.MAP" ]; }
+if [ $# -ge 1 ] && [ -d "$1" ]; then
+  exec "$SV" --extrapath="$EXTRA" --path="$1" rise
 fi
+# auto-detect a ROTD game folder next to this launcher or in CWD
+for base in "$HERE" "$PWD"; do
+  has_game "$base" && exec "$SV" --extrapath="$EXTRA" --path="$base" rise
+  for d in "$base"/*/; do
+    [ -d "$d" ] && has_game "$d" && exec "$SV" --extrapath="$EXTRA" --path="$d" rise
+  done
+done
+exec "$SV" --extrapath="$EXTRA"
 LAUNCH
 chmod +x "$OUT/rotd-cht.sh"
 
@@ -61,12 +68,13 @@ Rise of the Dragon 繁體中文版 (patched ScummVM bundle)
 需要準備
   你自己合法擁有的一份《Rise of the Dragon》遊戲資料夾（內含 VOLUME.VGA 等）。
 
-啟動
-  1) 直接玩：   ./rotd-cht.sh /路徑/到/你的/遊戲資料夾
-  2) 用啟動器： ./rotd-cht.sh        然後在 ScummVM 介面手動加入遊戲
+啟動（三選一）
+  1) 自動偵測（最省事）：把本資料夾放到「你的遊戲資料夾旁邊」或「遊戲資料夾裡」，
+     直接執行 ./rotd-cht.sh —— 會自動找到遊戲、用中文啟動。
+  2) 指定路徑：   ./rotd-cht.sh /路徑/到/你的/遊戲資料夾
+  3) 用啟動器：   ./rotd-cht.sh （找不到遊戲時）會開 ScummVM 介面，手動加入遊戲一次即可。
 
-遊戲中
-  按 F8 循環顯示模式：英文(原始) → 中文 24×24 → 中文 16×16 → 德文。
+預設就是中文（24×24）。遊戲中按 F8 循環：中文 24×24 → 中文 16×16 → 德文 → 英文(原始)。
 
 內容
   bin/scummvm          patched ScummVM（dgds 引擎 + CJK 模組）

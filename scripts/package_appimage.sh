@@ -14,17 +14,32 @@ cp "$BUNDLE/bin/scummvm"        "$APPDIR/usr/bin/"
 cp -r "$BUNDLE/lib/."           "$APPDIR/usr/lib/"
 cp -r "$BUNDLE/share/rotd-cht/." "$APPDIR/usr/share/rotd-cht/"
 
-# AppRun: optional game dir as $1; --extrapath so the engine finds CJK/DE assets.
+# AppRun: launches the game directly. Order of preference for the game folder:
+#   1) a path given as an argument (drag-drop / terminal)
+#   2) AUTO-DETECT: a ROTD folder (has volume.vga) next to the AppImage or in CWD
+#   3) otherwise open the ScummVM launcher (user adds the game once)
+# --extrapath makes the engine find the bundled CJK/DE assets -> Chinese by default.
 cat > "$APPDIR/AppRun" <<'RUN'
 #!/usr/bin/env bash
 HERE="$(dirname "$(readlink -f "$0")")"
 export LD_LIBRARY_PATH="$HERE/usr/lib:${LD_LIBRARY_PATH:-}"
+SV="$HERE/usr/bin/scummvm"
 EXTRA="$HERE/usr/share/rotd-cht"
-if [ $# -ge 1 ]; then
-  exec "$HERE/usr/bin/scummvm" --extrapath="$EXTRA" --path="$1" rise
-else
-  exec "$HERE/usr/bin/scummvm" --extrapath="$EXTRA"
+has_game() { [ -f "$1/volume.vga" ] || [ -f "$1/VOLUME.VGA" ] || [ -f "$1/RESOURCE.MAP" ]; }
+# 1) explicit path
+if [ $# -ge 1 ] && [ -d "$1" ]; then
+  exec "$SV" --extrapath="$EXTRA" --path="$1" rise
 fi
+# 2) auto-detect near the .AppImage file and the current dir (and one level of subdirs)
+APPDIR_OF_IMG="$(dirname "$(readlink -f "${APPIMAGE:-$0}")")"
+for base in "$APPDIR_OF_IMG" "$PWD"; do
+  has_game "$base" && exec "$SV" --extrapath="$EXTRA" --path="$base" rise
+  for d in "$base"/*/; do
+    [ -d "$d" ] && has_game "$d" && exec "$SV" --extrapath="$EXTRA" --path="$d" rise
+  done
+done
+# 3) fallback: launcher (Extra Path preset so an added game still renders Chinese)
+exec "$SV" --extrapath="$EXTRA"
 RUN
 chmod +x "$APPDIR/AppRun"
 
