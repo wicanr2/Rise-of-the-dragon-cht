@@ -103,9 +103,21 @@ static int16_t input_state_cb(unsigned port, unsigned device, unsigned index, un
     (void)index;
     /* press START only inside a window [input_after, input_after+700] to start the
      * game past the title/license/loading; then go hands-off so dialogues linger. */
-    if (id == RETRO_DEVICE_ID_JOYPAD_START &&
-        g_frame >= g_input_after && g_frame < g_input_after + 250 &&
-        (g_frame % 80) < 4)
+    /* Sequence to reach the apartment: START at title, then navigate the
+     * SKIP/PLAY INTRODUCTION choice to SKIP. Genesis C = RETRO_DEVICE_ID_JOYPAD_A.
+     * Frames relative to g_input_after (the title-screen frame). */
+    unsigned f = (g_frame >= g_input_after) ? g_frame - g_input_after : 999999;
+    int pulse = (f % 70) < 5; /* tap, not hold */
+    /* Reach the apartment: (1) START at BIOS press-start to boot the CD; (2) START at the
+     * game title to begin -> the SKIP/CONTINUE choice appears; (3) press an ACTION button
+     * (Genesis A/B/C = libretro Y/B/A) to confirm SKIP (default). Then hands-off so Blade's
+     * opening monologue lingers. */
+    /* Boot sequence (Mega-CD BIOS is multi-menu): START repeatedly navigates
+     * press-start -> BIOS control panel (CD-ROM) -> game title -> intro. To SKIP to the
+     * apartment instead of playing the intro, the SKIP/CONTINUE choice (right after the
+     * title) needs an ACTION button (A/B/C), not START -- but isolating that single moment
+     * blind is unreliable; see docs/SEGACD_RE_NOTES.md. Default here just reaches gameplay. */
+    if (id == RETRO_DEVICE_ID_JOYPAD_START && f < 800 && pulse)
         return 1;
     return 0;
 }

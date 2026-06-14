@@ -159,6 +159,23 @@ MEGA-CD BOOT ROM ... 1.00p" (JP Model 1). Installed to `/home/anr2/emulator/bios
   → interactive gameplay = Blade's apartment (same layout as PC, clock 7/31 12:0x).
 - Resolution 320×224; game palette is green-tinted (cyberpunk). All frames dumped as PPM.
 
+### Boot/navigation map (verified by frame capture)
+1. BIOS "スタートボタンを押して下さい" (JP, BIOS font) — press START.
+2. **Mega-CD BIOS CONTROL PANEL** (CD-ROM / CDG / OPEN/STOP/PLAY / TRACK 05 …) — GPGX does
+   NOT auto-boot the game; you must select **CD-ROM** here to boot the disc.
+3. Game title "Rise of the Dragon / ▶START CONTINUE / PRESS START BUTTON" — waits for input
+   (does NOT auto-advance; confirmed by a boot-only run sitting here forever). Press START.
+4. **SKIP / CONTINUE 劇情 choice** (appears right after the title) — press an ACTION button
+   (A/B/C = libretro Y/B/A) to confirm SKIP (default). START here = CONTINUE (plays the intro).
+5. After SKIP → Blade's apartment (gameplay) where the opening monologue is.
+Else (CONTINUE): English credits roll (~48s) → voiced intro cutscene (portraits, no text) →
+apartment.
+
+**Navigation is the bottleneck:** scripting these 4 menus with blind frame-timed input is
+unreliable (each emulation run ~40s; the title→choice window is ~40 frames and a stray START
+selects CONTINUE). Best unblock = a GPGX-compatible **savestate at a JP dialogue** from the
+user, OR exact per-menu input timing. The emulation itself is fully working.
+
 **Remaining blocker = reaching in-game DIALOGUE text.** The SD4 dialogue (speech bubbles, like
 PC) only shows on point-and-click interaction. The harness only presses START (boots/advances
 cutscenes); it does NOT move the cursor, so gameplay look-dialogues aren't triggered. The intro
