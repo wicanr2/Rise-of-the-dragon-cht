@@ -117,7 +117,18 @@ static int16_t input_state_cb(unsigned port, unsigned device, unsigned index, un
      * apartment instead of playing the intro, the SKIP/CONTINUE choice (right after the
      * title) needs an ACTION button (A/B/C), not START -- but isolating that single moment
      * blind is unreliable; see docs/SEGACD_RE_NOTES.md. Default here just reaches gameplay. */
-    if (id == RETRO_DEVICE_ID_JOYPAD_START && f < 800 && pulse)
+    /* Deliberate per-menu navigation (each menu waits for input):
+     *  f[0,150]   START   : BIOS press-start -> control panel
+     *  f[300,460] C(=A)   : control panel -> select CD-ROM -> boot game
+     *  f[1150,1230] START : game title -> SKIP/CONTINUE choice
+     *  f[1300,1800] A/B/C : confirm SKIP -> apartment */
+    if (id == RETRO_DEVICE_ID_JOYPAD_START &&
+        ((f < 150) || (f >= 1250 && f < 1450)) && (f % 130) < 5)
+        return 1;
+    if (id == RETRO_DEVICE_ID_JOYPAD_A && f >= 300 && f < 460 && pulse)
+        return 1;
+    if ((id == RETRO_DEVICE_ID_JOYPAD_Y || id == RETRO_DEVICE_ID_JOYPAD_B ||
+         id == RETRO_DEVICE_ID_JOYPAD_A) && f >= 1500 && f < 2400 && pulse)
         return 1;
     return 0;
 }
