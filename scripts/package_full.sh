@@ -67,37 +67,29 @@ build_windows() {
 }
 
 build_mac() {
-  # macOS binary can't be cross-compiled from Linux (needs Apple's SDK). Ship a template:
-  # game + CJK assets + the engine patch + native-build recipe. User builds scummvm on a Mac.
-  local N=rotd-cht-FULL-mac-template O=dist/rotd-cht-FULL-mac-template
-  rm -rf "$O"; mkdir -p "$O/share/rotd-cht" "$O/patches" "$O/bin"
-  cp build/zh.dtr build/de.dtr build/dragon_zh24.dcjk build/dragon_zh16.dcjk "$O/share/rotd-cht/" 2>/dev/null || true
-  cp patches/dgds-cjk.patch "$O/patches/" 2>/dev/null || true
-  cp scripts/build_macos.sh "$O/" 2>/dev/null || true
+  # Real full package = the GitHub-Actions-built .app (dist/ci/rotd-cht-macos.tar.gz) +
+  # the game + a double-clickable launcher. Falls back to a template if no .app is present.
+  local CIAPP="dist/ci/rotd-cht-macos.tar.gz"
+  local N=rotd-cht-FULL-mac O=dist/rotd-cht-FULL-mac
+  if [ ! -f "$CIAPP" ]; then
+    echo "[mac] no CI .app at $CIAPP — run the GitHub Action + 'gh run download ... -n rotd-cht-macos -D dist/ci' first"
+    return 1
+  fi
+  rm -rf "$O"; mkdir -p "$O"
+  tar xzf "$CIAPP" -C "$O"                                   # -> "Rise of the Dragon CHT.app"
+  local EXTRA="$O/Rise of the Dragon CHT.app/Contents/Resources/extra"
+  cp build/de.dtr "$EXTRA/" 2>/dev/null || true             # CI doesn't build de.dtr; add it locally
   copy_game "$O"
-  cat > "$O/README.txt" <<'DOC'
-Rise of the Dragon 繁體中文版 — Mac 完整包「模板」
-==================================================
-⚠ 這包少了一樣東西：bin/scummvm（macOS 執行檔）。Apple 的 macOS SDK 受版權，
-  無法從 Linux 交叉編譯，所以這顆 binary 必須「在 Mac 上」編。其餘都備齊了。
-
-在 Mac 上完成（一次）
-  1) brew install sdl2 freetype libpng libvorbis flac mad faad2 fluid-synth
-  2) git clone https://github.com/scummvm/scummvm && cd scummvm
-     git apply /path/to/patches/dgds-cjk.patch
-  3) bash /path/to/build_macos.sh   （或見其中註解手動 configure && make）
-  4) 把產生的 scummvm 放進本資料夾的 bin/，然後執行：
-        bin/scummvm --extrapath=share/rotd-cht --path=game rise
-  預設中文；F8 循環 中24/中16/德/英。
-
-內容
-  game/               遊戲本體（你合法擁有的那份）
-  share/rotd-cht/      語言資產 zh/de + dragon_zh24/16.dcjk
-  patches/dgds-cjk.patch  繁中引擎 patch
-  build_macos.sh      native 編譯腳本（在 Mac 上跑）
-⚠ 含受版權遊戲本體，僅供你個人存檔／遊玩，請勿散布。
-DOC
-  echo "[mac-template] $O"; archive_tar "$N"
+  cat > "$O/玩-rotd-cht.command" <<'CMD'
+#!/bin/bash
+# 雙擊我即可（首次右鍵→打開 以過 Gatekeeper）。用內附 game/ 中文啟動。
+DIR="$(cd "$(dirname "$0")" && pwd)"
+C="$DIR/Rise of the Dragon CHT.app/Contents"
+exec "$C/MacOS/scummvm" --extrapath="$C/Resources/extra" --path="$DIR/game" rise
+CMD
+  chmod +x "$O/玩-rotd-cht.command"
+  readme "$O" "雙擊 玩-rotd-cht.command（首次：右鍵→打開,以過 macOS Gatekeeper）—— 用內附 game/ 中文啟動。"
+  echo "[mac-full] $O"; archive_tar "$N"
 }
 
 case "$PLAT" in
