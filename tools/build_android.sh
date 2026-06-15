@@ -38,11 +38,11 @@ docker run --rm -v "$PWD":/work -v "$SRC":/src:ro -w /work ubuntu:24.04 bash -c 
     >/tmp/acfg.log 2>&1 || { echo CONFIGURE_FAIL; tail -40 /tmp/acfg.log; exit 1; }
 
   echo "=== build debug APK with bundled game (this takes a while) ==="
-  make -j4 androiddebug GAMES_BUNDLE_DIRECTORY=/work/build/android_games >/tmp/amake.log 2>&1 \
-    || { echo "MAKE androiddebug FAILED; trying without games bundle"; \
-         make -j4 androiddebug >>/tmp/amake.log 2>&1 || { echo MAKE_FAIL; tail -50 /tmp/amake.log; exit 1; }; }
+  make -j4 androiddistdebug GAMES_BUNDLE_DIRECTORY=/work/build/android_games >/tmp/amake.log 2>&1 \
+    || { echo "MAKE with games FAILED; trying plain APK"; \
+         make -j4 androiddistdebug >>/tmp/amake.log 2>&1 || { echo MAKE_FAIL; tail -60 /tmp/amake.log; exit 1; }; }
 
-  APK=$(ls -1 *.apk 2>/dev/null | head -1)
+  APK=$(ls -1 *.apk debug/*.apk 2>/dev/null | head -1)
   [ -n "$APK" ] || { echo NO_APK; ls -la; tail -30 /tmp/amake.log; exit 1; }
   cp "$APK" /work/dist/rotd-cht-android.apk
   echo "APK_BUILT: $(ls -la /work/dist/rotd-cht-android.apk | awk "{print \$5}") bytes"
