@@ -109,3 +109,66 @@ void Dialog::drawForeground(surface, fontcol, txt) {
   長對話可能溢出 → Phase 2/4 需做自動分頁（click-to-continue）或縮放泡泡。
 - **REQ 文字定位**：按鈕文字在 `request.cpp` 如何 keying，Phase 3 確認。
 - **切語言重繪**：需強制 redraw 當前場景；對話進行中切換的狀態保留待測。
+
+---
+
+# 實作後記（與設計稿的差異 + 硬核學習）
+
+> 以下記錄**實際做出來**之後與上面設計稿的偏離，以及反覆踩坑換來的非顯然結論。
+> 設計稿是規劃；本段是 ground truth。維護時以本段為準。完整可重用 SOP 另見全域 skill `rise-of-the-dragon-cht`。
+
+## 與設計稿的偏離
+
+| 設計稿 | 實際 |
+|---|---|
+| `DgdsCJKFont` + `TranslationOverlay` 兩個 class | 合併成單一 **`CJKSupport`**（`cjk.h/.cpp`），含字型 + 譯文 + 顯示模式 |
+| `Ctrl+L` 切語言 | **F8**（`metaengine.cpp` keymapper action `TOGGLE_LANG`，也綁 `C+S+l`） |
+| CJK 直接畫進 320×200 surface | ⭐ **hi-res overlay**：`deferLine()` 收集行 → `flushDeferred()` 在 `present2x()` 把 24px bitmap 畫進 **640×400 `_hiresBuffer`**（不是 320 inline）。CJK 永遠以真實 24px 畫、不被 2x 放大糊掉 |
+| `fontHeight()` = 12 | 仍是 12（**320 空間**的行高；deferLine 座標都是 320 空間，render 時 ×2） |
+| 只有對話一條路徑 | **三條獨立路徑**（見下），漏一條就有英文殘留 |
+
+## 三條繪字路徑（最重要 — 換遊戲必先確認都 hook 到）
+
+| 路徑 | hook | 查表 |
+|---|---|---|
+| 對話內文 | `dialog.cpp drawForeground` | `lookupDialog(scene,num)` |
+| 對話名牌 / 選單 / REQ 標題 | `request.cpp drawHeader` | `lookupUI(header)`（名牌 = 對話冒號前，**用英文 key**，補 `UI:<英文名牌>` 即中文化，純資料）|
+| **TTM 畫面文字**（電腦/視訊電話/捷運/保全鍵盤）| `ttm.cpp` drawString op `0xa2X0` | `lookupUI(str)`（用 `tools/extract_ttm_strings.py` 從 `TT3:` chunk 抽 SET STRING `0xf1X0`，**別瞎玩遊戲找字**）|
+
+## TTM 持久層 — 最深的坑（committed-flag + STORE AREA）
+
+TTM 畫面文字**畫一次然後 ADS hold**（不像對話框每幀重畫）。英文持久靠 STORE AREA op `0x4200` 把 composition 區域存進 `_storedAreaBuffer` 每幀 transBlit；CJK 是 hi-res overlay（present 時最後畫），兩者像素模型不同步 → 一連串症狀：
+
+| 症狀 | 正解 |
+|---|---|
+| 訊息閃一幀就消失 | 獨立持久層 `_deferredBg`（per-frame `clearDeferred()` 不碰它）|
+| 切 NEXT/PREV 多則疊加 | 每行帶 `committed` 旗標；`commitBg(rect)`（ttm `0x4200`）移除 rect 內舊 committed 行、把新行標 committed |
+| 沒 STORE AREA 的畫面（捷運 `emp1.ttm` 0 個）| 行維持未 committed、持續顯示；`clearDeferredBg()` 在 **F8 切語言 + 換場景** 清 |
+| ⭐ 標題浮在「會動的臉」上 | **視訊電話的臉 = 普通 ttm DRAW SPRITE（`136×87 @ 65,9`），不是 talking-head！** 在 `ttm.cpp` doDrawSprite 後 `clearDeferredBgRect(spriteRect)` 清掉被臉蓋住的 overlay。訊息清單 header 不受影響，因為「先畫圖→後 defer header」的順序 |
+
+**教訓**：先確認每個 ttm **有/沒有 STORE AREA**、臉到底哪個 op 畫的，**別假設**。`runScript haveHead=0 hasScript=0` 證實視訊臉不走 CDS/talking-head。
+
+## 對話框溢出 → 自動長高（解掉設計稿的「已知風險」）
+
+24px 中文（12 單位/行）比英文小字（~4 單位/行）高 3 倍，3+ 行對話溢出框底。
+**`dialog.cpp drawType2`**：兩個 draw stage 從 `_rect` 算框/文字區之前，先 `wrapText` 量 CJK 行數，
+`_rect.height` 不夠就**往下長高**（clamp 在螢幕內）。保留 24px 可讀性、不縮字、不溢出。
+
+## 除錯方法論（這次定位視訊臉的關鍵）
+
+headless（Xvfb 無真實音訊）下**視訊臉不 render**（音訊/影片驅動），所以本機重現不出來。解法：
+1. **用玩家存檔**（`~/.local/share/scummvm/saves/rise.00N`）`scummvm -x N` 直接載到目標畫面。
+2. 在 hook 點加 `warning("ROTDDBG ...")` 印**繪圖 op 的位置+大小**，build debug 版。
+3. **在玩家自己的桌面 session 跑**（不是從別的 process context 啟動 — GNOME 收不進視窗、alt-tab 看不到）：
+   `XAUTHORITY` 要用 session 的、輸出導到檔案我讀。或乾脆請玩家在自己終端機跑、貼 log。
+4. 從 log 的 `ttmdraw at 65,9 sz 136x87`（出現 78 次 = 動畫幀）直接認出臉 → 精準 hook。
+
+> 陷阱：`game_en/.../autopilot.txt` 一存在 dgds 就跑 game-tester 腳本（結尾 `quit` → 一開就退、或 `hot area NN not found` → crash）。測試腳本會偷寫它，跑遊戲前先清掉。`getenv` 是 ScummVM 禁用符號。
+
+## Android 注入（遊戲不上 GitHub，本地組）
+
+CI 只編引擎+資產。`tools/inject_android.sh` 注入遊戲 + 三顆缺的 `.so`：
+`libscummvm.so → liboboe.so → libc++_shared.so`（configure 硬連 `-loboe`、oboe 無法關）。
+遊戲要放 APK **雙層** `assets/assets/games/<id>` + 登錄 `assets/MD5SUMS` 才會展開 + mass-add。
+`patches/android-surface-race.patch` 修 S25+/Android16 `eglCreateWindowSurface` 秒退；
+`patches/android-autostart-rise.patch` 直接 boot 遊戲。`extractNativeLibs=true` 所以 16KB 警告非致命。
