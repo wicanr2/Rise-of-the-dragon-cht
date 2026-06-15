@@ -114,6 +114,9 @@ jobs:
           git clone https://github.com/scummvm/scummvm
           cd scummvm && git checkout "$SCUMMVM_COMMIT"
           git apply ../patches/dgds-cjk.patch || patch -p1 < ../patches/dgds-cjk.patch
+          # fix insta-crash on fast/modern Android (S25+/Android 16): wait for a valid Surface
+          # before eglCreateWindowSurface() instead of fatally aborting on a transient null surface
+          git apply ../patches/android-surface-race.patch || patch -p1 < ../patches/android-surface-race.patch
       - name: configure + build APK
         run: |
           cd scummvm

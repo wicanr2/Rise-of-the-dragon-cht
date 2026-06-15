@@ -11,6 +11,7 @@ BASE="${1:-dist/ci/rotd-cht-android.apk}"
 GAMES="build/android_games"   # contains riseofthedragon/ (game + dcjk/dtr)
 [ -f "$BASE" ] || { echo "base APK not found: $BASE"; exit 1; }
 [ -d "$GAMES/riseofthedragon" ] || { echo "no game bundle at $GAMES/riseofthedragon"; exit 1; }
+[ -f build/android_libs/libc++_shared.so ] || { echo "missing build/android_libs/libc++_shared.so (arm64, from NDK r26d sysroot) -- liboboe.so needs it"; exit 1; }
 
 docker run --rm -v "$PWD":/work -w /work ubuntu:24.04 bash -c '
   set -e
@@ -33,8 +34,19 @@ docker run --rm -v "$PWD":/work -w /work ubuntu:24.04 bash -c '
   cp -r build/android_games/riseofthedragon /tmp/stage/assets/games/
   cp "'"$BASE"'" /tmp/work.apk
 
-  # inject game+assets into the APK, drop the old signature
-  ( cd /tmp/stage && zip -qr /tmp/work.apk assets )
+  # Runtime native-lib closure the CI base APK is missing (-> insta-crash on launch):
+  #   libscummvm.so --NEEDED--> liboboe.so --NEEDED--> libc++_shared.so
+  # CI only linked oboe in the build sysroot and never packaged the runtime .so; the prebuilt
+  # oboe is c++_shared so it also needs libc++_shared.so. Bundle BOTH (arm64-v8a;
+  # extractNativeLibs=true so plain deflate + no special page-align needed).
+  mkdir -p /tmp/stage/lib/arm64-v8a
+  wget -q https://dl.google.com/dl/android/maven2/com/google/oboe/oboe/1.9.0/oboe-1.9.0.aar -O /tmp/oboe.aar
+  unzip -q -o /tmp/oboe.aar -d /tmp/oboe
+  cp "$(find /tmp/oboe -name liboboe.so -path "*arm64*" | head -1)" /tmp/stage/lib/arm64-v8a/liboboe.so
+  cp build/android_libs/libc++_shared.so /tmp/stage/lib/arm64-v8a/libc++_shared.so
+
+  # inject game+assets + liboboe.so into the APK, drop the old signature
+  ( cd /tmp/stage && zip -qr /tmp/work.apk assets lib )
   zip -q -d /tmp/work.apk "META-INF/*" >/dev/null 2>&1 || true
 
   # align (uncompressed entries to 4 bytes) then sign with a generated debug key
