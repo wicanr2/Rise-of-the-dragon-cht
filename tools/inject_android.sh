@@ -13,6 +13,14 @@ GAMES="build/android_games"   # contains riseofthedragon/ (game + dcjk/dtr)
 [ -d "$GAMES/riseofthedragon" ] || { echo "no game bundle at $GAMES/riseofthedragon"; exit 1; }
 [ -f build/android_libs/libc++_shared.so ] || { echo "missing build/android_libs/libc++_shared.so (arm64, from NDK r26d sysroot) -- liboboe.so needs it"; exit 1; }
 
+# Refresh the localization assets from the canonical build/ artifacts so a stale snapshot in
+# android_games/ can't silently ship an old translation (this bit us: desktop got the new zh.dtr
+# but the APK kept the old one). Game data (VOLUME.*) in android_games/ is the static base.
+for a in zh.dtr dragon_zh24.dcjk dragon_zh16.dcjk; do
+  [ -f "build/$a" ] && cp -f "build/$a" "$GAMES/riseofthedragon/$a"
+done
+echo "android_games zh.dtr md5: $(md5sum "$GAMES/riseofthedragon/zh.dtr" | cut -d' ' -f1)"
+
 docker run --rm -v "$PWD":/work -w /work ubuntu:24.04 bash -c '
   set -e
   export DEBIAN_FRONTEND=noninteractive
