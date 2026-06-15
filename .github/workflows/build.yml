@@ -48,7 +48,8 @@ jobs:
         with: { name: cht-assets, path: assets }
       - name: deps
         run: |
-          brew install sdl2 freetype libpng libvorbis flac mad faad2 fluid-synth pkg-config a52 mpeg2dec fribidi dylibbundler
+          brew install sdl2 freetype libpng pkg-config dylibbundler
+          brew install libvorbis flac mad faad2 fluid-synth fribidi a52dec mpeg2dec || true  # optional codecs
       - name: clone + patch scummvm
         run: |
           git clone https://github.com/scummvm/scummvm
@@ -91,11 +92,11 @@ jobs:
         with: { name: cht-assets, path: assets }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
-      - name: android sdk + ndk 23.2
-        run: |
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;23.2.8568313" >/dev/null
-          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/23.2.8568313" >> $GITHUB_ENV
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0 ndk;23.2.8568313'
+      - name: ndk env
+        run: echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/23.2.8568313" >> $GITHUB_ENV
       - name: deps
         run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential
       - name: clone + patch scummvm
