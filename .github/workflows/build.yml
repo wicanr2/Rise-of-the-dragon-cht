@@ -1,0 +1,114 @@
+name: build-rotd-cht
+
+# Builds the patched ScummVM (dgds + 繁中 CHT) for macOS and Android on CI runners.
+# macOS can't be cross-compiled from Linux (needs Apple's SDK) -> a real macOS runner solves it.
+# The game data is NOT in this repo (copyright); CI produces the patched engine + CJK assets,
+# which you combine with your own legally-owned ROTD game folder.
+on:
+  workflow_dispatch:
+  push:
+    paths: [ '.github/workflows/build.yml', 'patches/**', 'translations/**', 'tools/**' ]
+
+env:
+  SCUMMVM_COMMIT: f4526cf007688d02b8c558f048f0889088545fd5  # patch base; keep in sync with patches/dgds-cjk.patch
+
+jobs:
+  # ---- build the 繁中 language assets once (apt has the CJK fonts) ----
+  assets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: deps + fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-noto-cjk fonts-wqy-zenhei python3-pip
+          python3 -m pip install --quiet freetype-py pillow
+      - name: build dcjk fonts + zh.dtr
+        run: |
+          mkdir -p build
+          python3 tools/build_cjk_font.py --size 24 --out build/dragon_zh24.dcjk
+          python3 tools/build_cjk_font.py --size 16 --out build/dragon_zh16.dcjk
+          python3 tools/build_translation.py translations/zh.json build/zh.dtr
+          ls -la build/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cht-assets
+          path: |
+            build/*.dtr
+            build/*.dcjk
+          retention-days: 7
+
+  # ---- macOS .app ----
+  macos:
+    needs: assets
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: cht-assets, path: assets }
+      - name: deps
+        run: |
+          brew install sdl2 freetype libpng libvorbis flac mad faad2 fluid-synth pkg-config a52 mpeg2dec fribidi dylibbundler
+      - name: clone + patch scummvm
+        run: |
+          git clone https://github.com/scummvm/scummvm
+          cd scummvm && git checkout "$SCUMMVM_COMMIT"
+          git apply ../patches/dgds-cjk.patch || patch -p1 < ../patches/dgds-cjk.patch
+      - name: configure + build
+        run: |
+          cd scummvm
+          ./configure --disable-all-engines --enable-engine=dgds --enable-release
+          make -j3
+      - name: bundle .app
+        run: |
+          APP="Rise of the Dragon CHT.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/extra" "$APP/Contents/libs"
+          cp scummvm/scummvm "$APP/Contents/MacOS/"
+          cp assets/*.dtr assets/*.dcjk "$APP/Contents/Resources/extra/"
+          dylibbundler -od -b -x "$APP/Contents/MacOS/scummvm" -d "$APP/Contents/libs" -p @executable_path/../libs || true
+          cat > "$APP/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleName</key><string>Rise of the Dragon CHT</string>
+            <key>CFBundleExecutable</key><string>scummvm</string>
+            <key>CFBundleIdentifier</key><string>org.scummvm.rotd-cht</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+          </dict></plist>
+          PLIST
+          # launcher note: run with your game ->  Contents/MacOS/scummvm --extrapath=Contents/Resources/extra --path=<game> rise
+          tar czf rotd-cht-macos.tar.gz "$APP"
+      - uses: actions/upload-artifact@v4
+        with: { name: rotd-cht-macos, path: rotd-cht-macos.tar.gz }
+
+  # ---- Android APK ----
+  android:
+    needs: assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: cht-assets, path: assets }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - name: android sdk + ndk 23.2
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;23.2.8568313" >/dev/null
+          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/23.2.8568313" >> $GITHUB_ENV
+      - name: deps
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential
+      - name: clone + patch scummvm
+        run: |
+          git clone https://github.com/scummvm/scummvm
+          cd scummvm && git checkout "$SCUMMVM_COMMIT"
+          git apply ../patches/dgds-cjk.patch || patch -p1 < ../patches/dgds-cjk.patch
+      - name: configure + build APK
+        run: |
+          cd scummvm
+          ./configure --host=android-arm64-v8a --enable-release \
+            --disable-all-engines --enable-engine=dgds
+          make -j3 androiddistdebug
+          find . -name '*.apk' -exec cp {} ../rotd-cht-android.apk \;
+      - uses: actions/upload-artifact@v4
+        with: { name: rotd-cht-android, path: rotd-cht-android.apk }
