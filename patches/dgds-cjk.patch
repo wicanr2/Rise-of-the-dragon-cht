@@ -906,10 +906,36 @@ index 1eedfb4d..5b09063b 100644
  	const Common::SharedPtr<Image> &getIcons() { return _icons; }
  	GamePalettes *getGamePals() { return _gamePals; }
 diff --git a/engines/dgds/dialog.cpp b/engines/dgds/dialog.cpp
-index 95c84790..d827e351 100644
+index 95c84790..ff73b247 100644
 --- a/engines/dgds/dialog.cpp
 +++ b/engines/dgds/dialog.cpp
-@@ -553,10 +553,60 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
+@@ -213,6 +213,25 @@ void Dialog::drawType2(Graphics::ManagedSurface *dst, DialogDrawStage stage) {
+ 			txt.replace(offset, 6, numstr);
+ 	}
+ 
++	// ROTD CHT: 24px CJK is taller than the small English font the box was sized for, so 3+ line
++	// dialogs overflow the bottom. Grow the box downward (clamped to the screen) to fit the wrapped
++	// CJK text, before either draw stage sizes the frame / text area from _rect.
++	{
++		CJKSupport &cjk = engine->getCJK();
++		if (cjk.isCJK() && cjk.hasOverlay() && engine->getScene()) {
++			const Common::String *tr = cjk.lookupDialog(engine->getScene()->getNum(), _num);
++			if (tr) {
++				const DgdsFont *afont = getDlgTextFont();
++				const int lh = cjk.fontHeight() + 1;
++				Common::StringArray zl;
++				cjk.wrapText(*tr, _rect.width - 16, zl, afont);
++				int need = (int)zl.size() * lh + 13 + (title.empty() ? 0 : 11);
++				if (_rect.height < need)
++					_rect.height = MIN<int>(need, 200 - _rect.y - 1);
++			}
++		}
++	}
++
+ 	if (stage == kDlgDrawStageBackground) {
+ 		if (engine->getGameId() == GID_DRAGON)
+ 			drawType2BackgroundDragon(dst, title);
+@@ -553,10 +572,60 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
  	// For now do the simplest wrapping, no highlighting.
  	assert(_state);
  
@@ -971,7 +997,7 @@ index 95c84790..d827e351 100644
  	uint numPrintedLines = _countPrintedLines(lines);
  
  	int ystart = _state->_loc.y + (_state->_loc.height - (int)numPrintedLines * h) / 2;
-@@ -567,12 +617,12 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
+@@ -567,12 +636,12 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
  	int highlightEnd = INT_MAX;
  	if (_state->_selectedAction) {
  		// find the txt in the full dlg string, as action offsets include the heading
@@ -986,7 +1012,7 @@ index 95c84790..d827e351 100644
  
  	Graphics::TextAlign align;
  	int xwidth;
-@@ -666,7 +716,7 @@ void Dialog::updateSelectedAction(int delta) {
+@@ -666,7 +735,7 @@ void Dialog::updateSelectedAction(int delta) {
  
  	if (_action.size() > 1 || !delta) {
  		debug(1, "Dialog %d: update mouse to %d, %d (mouseloc %d, selnum %d)", _num, mouseX, mouseY, _state->_strMouseLoc, _lastSelectedDialogItemNum);
@@ -1020,7 +1046,7 @@ index bb650cfa..fc89b8b7 100644
  			}
  
 diff --git a/engines/dgds/head.cpp b/engines/dgds/head.cpp
-index 177b6eb4..3a59af94 100644
+index 177b6eb4..d5da29d2 100644
 --- a/engines/dgds/head.cpp
 +++ b/engines/dgds/head.cpp
 @@ -174,6 +174,9 @@ void TalkData::drawAndUpdateVisibleHeads(Graphics::ManagedSurface &dst) {
@@ -1043,7 +1069,17 @@ index 177b6eb4..3a59af94 100644
  		env._cdsDidStoreArea = true;
  		break;
  	}
-@@ -569,8 +575,8 @@ void Conversation::runScriptExclusive() {
+@@ -273,6 +279,9 @@ void CDSTTMInterpreter::handleOperation(TTMEnviro &env_, TTMSeq &seq, uint16 op,
+ 			warning("CDS script tried to draw frame %d but img only has %d", frameno, img->loadedFrameCount());
+ 		} else {
+ 			img->drawBitmap(frameno, x, y, seq._drawWin, _vm->_compositionBuffer, flip, img->width(frameno), img->height(frameno));
++			// ROTD CHT: the CDS talking-head sprite (videophone caller face) covers this region each
++			// frame; drop the CJK overlay there so the message header doesn't float over the face.
++			_vm->getCJK().clearDeferredBgRect(Common::Rect(x, y, x + img->width(frameno), y + img->height(frameno)));
+ 		}
+ 		break;
+ 	}
+@@ -569,8 +578,8 @@ void Conversation::runScriptExclusive() {
  
  	CursorMan.showMouse(false);
  
@@ -1054,7 +1090,7 @@ index 177b6eb4..3a59af94 100644
  
  	// If we have head data we should dim the palette
  	engine->dimPalForWillyDialog(_haveHeadData);
-@@ -596,10 +602,10 @@ void Conversation::runScriptExclusive() {
+@@ -596,10 +605,10 @@ void Conversation::runScriptExclusive() {
  			Common::Rect r = _drawRect.toCommonRect();
  			r.clip(Common::Rect(SCREEN_WIDTH, SCREEN_HEIGHT));
  			const byte *srcPtr = (const byte *)engine->_compositionBuffer.getPixels() + r.top * SCREEN_WIDTH + r.left;
@@ -1067,7 +1103,7 @@ index 177b6eb4..3a59af94 100644
  
  		frameCount++;
  		// Limit to 15 FPS
-@@ -610,7 +616,7 @@ void Conversation::runScriptExclusive() {
+@@ -610,7 +619,7 @@ void Conversation::runScriptExclusive() {
  		if (targetMillis > elapsedMillis) {
  			while (targetMillis > elapsedMillis) {
  				pumpMessages();
@@ -1300,7 +1336,7 @@ index 29ca00a6..895b57ba 100644
  	GameItem *getDragItem() { return _dragItem; }
  	void setDragItem(GameItem *item) { _dragItem = item; }
 diff --git a/engines/dgds/ttm.cpp b/engines/dgds/ttm.cpp
-index 36ed1bc4..fcadd02e 100644
+index 36ed1bc4..e8c5345e 100644
 --- a/engines/dgds/ttm.cpp
 +++ b/engines/dgds/ttm.cpp
 @@ -27,6 +27,7 @@
@@ -1423,7 +1459,21 @@ index 36ed1bc4..fcadd02e 100644
  		} while( true );
  
  		break;
-@@ -624,7 +625,7 @@ void TTMInterpreter::doFadeOutOp(int16 colorno, int16 ncolors, int16 targetcol,
+@@ -606,6 +607,13 @@ void TTMInterpreter::doDrawSpriteOp(const TTMEnviro &env, const TTMSeq &seq, uin
+ 			y += env._yOff;
+ 		}
+ 		img->drawBitmap(frameno, x, y, seq._drawWin, _vm->_compositionBuffer, flipMode, dstWidth, dstHeight);
++		// ROTD CHT: this sprite covers its region in the pixel buffer (e.g. the videophone caller
++		// face over the message header). Drop the persistent CJK overlay it overwrites so the
++		// header stops floating during playback. (In the message list the photo is drawn before the
++		// header is deferred, so the header survives there.)
++		int _bw = img->width(frameno), _bh = img->height(frameno);
++		if (_bw > 0 && _bh > 0)
++			_vm->getCJK().clearDeferredBgRect(Common::Rect(x, y, x + _bw, y + _bh));
+ 	} else {
+ 		warning("Trying to draw image %d in env %d which is not loaded", bmpNo, env._enviro);
+ 	}
+@@ -624,7 +632,7 @@ void TTMInterpreter::doFadeOutOp(int16 colorno, int16 ncolors, int16 targetcol,
  		for (int i = 0; i < 320; i += speed) {
  			int fade = MIN(i / 5, 63);
  			_vm->getGamePals()->setFade(colorno, ncolors, targetcol, fade * 4);
@@ -1432,7 +1482,7 @@ index 36ed1bc4..fcadd02e 100644
  			g_system->delayMillis(5);
  		}
  
-@@ -640,8 +641,8 @@ void TTMInterpreter::doFadeOutOp(int16 colorno, int16 ncolors, int16 targetcol,
+@@ -640,8 +648,8 @@ void TTMInterpreter::doFadeOutOp(int16 colorno, int16 ncolors, int16 targetcol,
  		_vm->getBackgroundBuffer().fillRect(Common::Rect(SCREEN_WIDTH, SCREEN_HEIGHT), 0);
  	} else {
  		// In Willy Beamish, copy comp->screen and comp->back
@@ -1443,7 +1493,7 @@ index 36ed1bc4..fcadd02e 100644
  		_vm->getBackgroundBuffer().blitFrom(_vm->_compositionBuffer);
  	}
  	// Stored area is cleared in all games.
-@@ -661,9 +662,9 @@ void TTMInterpreter::doFadeInOp(int16 colorno, int16 ncolors, int16 targetcol, i
+@@ -661,9 +669,9 @@ void TTMInterpreter::doFadeInOp(int16 colorno, int16 ncolors, int16 targetcol, i
  			_vm->getGamePals()->setFade(colorno, ncolors, targetcol, fade * 4);
  			if (i == 320) {
  				// update screen first to make the initial fade-in work
@@ -1455,7 +1505,7 @@ index 36ed1bc4..fcadd02e 100644
  			g_system->delayMillis(5);
  		}
  
-@@ -879,9 +880,9 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
+@@ -879,9 +887,9 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
  		_doScroll(_vm->_compositionBuffer, ivals[0], ivals[1], ivals[2]);
  		// After scroll, we need to store the screen contents into the
  		// stored area buffer, and copy the background to the front?
@@ -1467,7 +1517,7 @@ index 36ed1bc4..fcadd02e 100644
  		_vm->_compositionBuffer.blitFrom(_vm->getStoredAreaBuffer());
  		break;
  	}
-@@ -905,6 +906,8 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
+@@ -905,6 +913,8 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
  			break;
  		Common::Rect rect(Common::Point(ivals[0], ivals[1]), ivals[2], ivals[3]);
  		_vm->getStoredAreaBuffer().blitFrom(_vm->_compositionBuffer, rect, rect);
@@ -1476,7 +1526,7 @@ index 36ed1bc4..fcadd02e 100644
  		break;
  	}
  	case 0x4210: { // SAVE GETPUT REGION (getput area) x,y,w,h:int
-@@ -986,7 +989,20 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
+@@ -986,7 +996,20 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
  		int width = ivals[2];
  		if (width == 0)
  			width = SCREEN_WIDTH - ivals[0];
