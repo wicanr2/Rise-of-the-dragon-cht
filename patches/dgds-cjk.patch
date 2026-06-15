@@ -162,10 +162,10 @@ index 00000000..16d0eb13
 +#endif
 diff --git a/engines/dgds/cjk.cpp b/engines/dgds/cjk.cpp
 new file mode 100644
-index 00000000..c437f2e9
+index 00000000..ada78c63
 --- /dev/null
 +++ b/engines/dgds/cjk.cpp
-@@ -0,0 +1,298 @@
+@@ -0,0 +1,323 @@
 +/* ScummVM dgds CJK localization support (Rise of the Dragon CHT). Non-upstream. */
 +
 +#include "common/file.h"
@@ -276,16 +276,19 @@ index 00000000..c437f2e9
 +		if (_avail[i] == _mode) break;
 +	_mode = _avail[(i + 1) % _avail.size()];
 +	selectActiveFont();
++	clearDeferredBg();
 +}
 +
 +void CJKSupport::setLang(CJKLang l) {
 +	_mode = (l == kCJKLangOrig) ? kDispOrig : kDispZH24;
 +	selectActiveFont();
++	clearDeferredBg();
 +}
 +
 +void CJKSupport::setMode(DisplayMode m) {
 +	_mode = m;
 +	selectActiveFont();
++	clearDeferredBg();
 +}
 +
 +const char *CJKSupport::modeName() const {
@@ -391,7 +394,29 @@ index 00000000..c437f2e9
 +	DeferredLine dl;
 +	dl.text = big5; dl.x = x; dl.y = y; dl.w = w; dl.color = color;
 +	dl.align = align; dl.asciiFont = asciiFont;
-+	(persist ? _deferredBg : _deferred).push_back(dl);
++	if (persist) {
++		dl.committed = false;
++		_deferredBg.push_back(dl);
++	} else {
++		_deferred.push_back(dl);
++	}
++}
++
++void CJKSupport::commitBg(const Common::Rect &rect) {
++	// A STORE AREA committed this rect of the screen: drop committed lines it overwrites (old
++	// content), and lock in the fresh lines inside it. Fresh lines outside the rect stay uncommitted
++	// (still drawn) -- this is what keeps the STORE-AREA-less subway map showing.
++	const int lineH = fontHeight() / 2 + 1; // CJK line height in 320x200 (deferLine coord) space
++	for (uint i = 0; i < _deferredBg.size();) {
++		DeferredLine &dl = _deferredBg[i];
++		bool overlaps = dl.x < rect.right && dl.x + dl.w > rect.left &&
++		                dl.y < rect.bottom && dl.y + lineH > rect.top;
++		if (overlaps) {
++			if (dl.committed) { _deferredBg.remove_at(i); continue; }
++			dl.committed = true;
++		}
++		i++;
++	}
 +}
 +
 +// Draw a half-width ASCII glyph from the small game font, nearest-scaled 2x, so it
@@ -466,10 +491,10 @@ index 00000000..c437f2e9
 +} // namespace Dgds
 diff --git a/engines/dgds/cjk.h b/engines/dgds/cjk.h
 new file mode 100644
-index 00000000..d9c773f8
+index 00000000..93d43581
 --- /dev/null
 +++ b/engines/dgds/cjk.h
-@@ -0,0 +1,112 @@
+@@ -0,0 +1,117 @@
 +/* ScummVM dgds CJK / multi-language localization support (Rise of the Dragon CHT).
 + * Non-upstream: engine-side translation overlays + bitmap fonts + display-mode cycle.
 + */
@@ -537,7 +562,11 @@ index 00000000..d9c773f8
 +	void deferLine(int x, int y, int w, uint32 color, const Common::String &big5,
 +	               Graphics::TextAlign align, const DgdsFont *asciiFont, bool persist = false);
 +	void clearDeferred() { _deferred.clear(); }       // per-frame: dialogs/menus re-defer each frame
-+	void clearDeferredBg() { _deferredBg.clear(); }   // call when the scene background is rebuilt
++	void clearDeferredBg() { _deferredBg.clear(); }   // scene change / F8 toggle
++	// Called by the TTM STORE AREA op (0x4200) with the stored rect: drop previously-committed lines
++	// this store overwrites and commit the lines just drawn for this screen. A store over a region
++	// with no fresh text (PLAY -> talking-head view, or the screen closing) therefore clears it.
++	void commitBg(const Common::Rect &rect);
 +	void flushDeferred(Graphics::ManagedSurface *dst640);
 +
 +private:
@@ -574,9 +603,10 @@ index 00000000..d9c773f8
 +		uint32 color;
 +		Graphics::TextAlign align;
 +		const DgdsFont *asciiFont;
++		bool committed;   // locked into the stored screen by a STORE AREA; removed when overwritten
 +	};
-+	Common::Array<DeferredLine> _deferred;     // cleared every frame
-+	Common::Array<DeferredLine> _deferredBg;   // persistent TTM background text
++	Common::Array<DeferredLine> _deferred;     // cleared every frame (dialogs/menus)
++	Common::Array<DeferredLine> _deferredBg;   // persistent TTM screen text (computer/videophone/subway)
 +};
 +
 +} // namespace Dgds
@@ -1234,7 +1264,7 @@ index 29ca00a6..895b57ba 100644
  	GameItem *getDragItem() { return _dragItem; }
  	void setDragItem(GameItem *item) { _dragItem = item; }
 diff --git a/engines/dgds/ttm.cpp b/engines/dgds/ttm.cpp
-index 36ed1bc4..aca7afb1 100644
+index 36ed1bc4..fcadd02e 100644
 --- a/engines/dgds/ttm.cpp
 +++ b/engines/dgds/ttm.cpp
 @@ -27,6 +27,7 @@
@@ -1401,7 +1431,16 @@ index 36ed1bc4..aca7afb1 100644
  		_vm->_compositionBuffer.blitFrom(_vm->getStoredAreaBuffer());
  		break;
  	}
-@@ -986,7 +987,20 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
+@@ -905,6 +906,8 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
+ 			break;
+ 		Common::Rect rect(Common::Point(ivals[0], ivals[1]), ivals[2], ivals[3]);
+ 		_vm->getStoredAreaBuffer().blitFrom(_vm->_compositionBuffer, rect, rect);
++		// ROTD CHT: commit/replace the CJK overlay for the region this STORE AREA just persisted.
++		_vm->getCJK().commitBg(rect);
+ 		break;
+ 	}
+ 	case 0x4210: { // SAVE GETPUT REGION (getput area) x,y,w,h:int
+@@ -986,7 +989,20 @@ void TTMInterpreter::handleOperation(TTMEnviro &env, TTMSeq &seq, uint16 op, byt
  		int width = ivals[2];
  		if (width == 0)
  			width = SCREEN_WIDTH - ivals[0];
