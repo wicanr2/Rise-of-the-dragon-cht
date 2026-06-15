@@ -162,10 +162,10 @@ index 00000000..16d0eb13
 +#endif
 diff --git a/engines/dgds/cjk.cpp b/engines/dgds/cjk.cpp
 new file mode 100644
-index 00000000..ada78c63
+index 00000000..8e5dbc5e
 --- /dev/null
 +++ b/engines/dgds/cjk.cpp
-@@ -0,0 +1,323 @@
+@@ -0,0 +1,336 @@
 +/* ScummVM dgds CJK localization support (Rise of the Dragon CHT). Non-upstream. */
 +
 +#include "common/file.h"
@@ -419,6 +419,19 @@ index 00000000..ada78c63
 +	}
 +}
 +
++void CJKSupport::clearDeferredBgRect(const Common::Rect &rect) {
++	const int lineH = fontHeight() / 2 + 1;
++	for (uint i = 0; i < _deferredBg.size();) {
++		const DeferredLine &dl = _deferredBg[i];
++		bool overlaps = dl.x < rect.right && dl.x + dl.w > rect.left &&
++		                dl.y < rect.bottom && dl.y + lineH > rect.top;
++		if (overlaps)
++			_deferredBg.remove_at(i);
++		else
++			i++;
++	}
++}
++
 +// Draw a half-width ASCII glyph from the small game font, nearest-scaled 2x, so it
 +// matches the 24px CJK height. Sentinel-keyed so the background shows through.
 +static void drawAsciiScaled2x(Graphics::ManagedSurface *dst, const DgdsFont *font,
@@ -491,10 +504,10 @@ index 00000000..ada78c63
 +} // namespace Dgds
 diff --git a/engines/dgds/cjk.h b/engines/dgds/cjk.h
 new file mode 100644
-index 00000000..93d43581
+index 00000000..0f1a3eb8
 --- /dev/null
 +++ b/engines/dgds/cjk.h
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,120 @@
 +/* ScummVM dgds CJK / multi-language localization support (Rise of the Dragon CHT).
 + * Non-upstream: engine-side translation overlays + bitmap fonts + display-mode cycle.
 + */
@@ -567,6 +580,9 @@ index 00000000..93d43581
 +	// this store overwrites and commit the lines just drawn for this screen. A store over a region
 +	// with no fresh text (PLAY -> talking-head view, or the screen closing) therefore clears it.
 +	void commitBg(const Common::Rect &rect);
++	// Drop persistent overlay lines a talking-head animation covers, so e.g. the videophone message
++	// header doesn't float on top of the playing head (the English header is hidden under the head).
++	void clearDeferredBgRect(const Common::Rect &rect);
 +	void flushDeferred(Graphics::ManagedSurface *dst640);
 +
 +private:
@@ -1004,10 +1020,20 @@ index bb650cfa..fc89b8b7 100644
  			}
  
 diff --git a/engines/dgds/head.cpp b/engines/dgds/head.cpp
-index 177b6eb4..f8fe2ac1 100644
+index 177b6eb4..3a59af94 100644
 --- a/engines/dgds/head.cpp
 +++ b/engines/dgds/head.cpp
-@@ -250,6 +250,9 @@ void CDSTTMInterpreter::handleOperation(TTMEnviro &env_, TTMSeq &seq, uint16 op,
+@@ -174,6 +174,9 @@ void TalkData::drawAndUpdateVisibleHeads(Graphics::ManagedSurface &dst) {
+ 		if (h._flags & kHeadFlagVisible) {
+ 			if (!(h._flags & kHeadFlagOpening)) {
+ 				h.drawHead(dst, *this);
++				// ROTD CHT: the head covers this region in the pixel buffer; drop any CJK overlay
++				// (e.g. the videophone message header) there so it doesn't float over the head.
++				DgdsEngine::getInstance()->getCJK().clearDeferredBgRect(h._rect.toCommonRect());
+ 			} else {
+ 				h._flags = static_cast<HeadFlags>(h._flags & ~kHeadFlagOpening);
+ 			}
+@@ -250,6 +253,9 @@ void CDSTTMInterpreter::handleOperation(TTMEnviro &env_, TTMSeq &seq, uint16 op,
  		}
  		const Common::Rect rect = env._storedAreaRect.toCommonRect();
  		_storedAreaBuffer.blitFrom(_vm->_compositionBuffer, rect, rect);
@@ -1017,7 +1043,7 @@ index 177b6eb4..f8fe2ac1 100644
  		env._cdsDidStoreArea = true;
  		break;
  	}
-@@ -569,8 +572,8 @@ void Conversation::runScriptExclusive() {
+@@ -569,8 +575,8 @@ void Conversation::runScriptExclusive() {
  
  	CursorMan.showMouse(false);
  
@@ -1028,7 +1054,7 @@ index 177b6eb4..f8fe2ac1 100644
  
  	// If we have head data we should dim the palette
  	engine->dimPalForWillyDialog(_haveHeadData);
-@@ -596,10 +599,10 @@ void Conversation::runScriptExclusive() {
+@@ -596,10 +602,10 @@ void Conversation::runScriptExclusive() {
  			Common::Rect r = _drawRect.toCommonRect();
  			r.clip(Common::Rect(SCREEN_WIDTH, SCREEN_HEIGHT));
  			const byte *srcPtr = (const byte *)engine->_compositionBuffer.getPixels() + r.top * SCREEN_WIDTH + r.left;
@@ -1041,7 +1067,7 @@ index 177b6eb4..f8fe2ac1 100644
  
  		frameCount++;
  		// Limit to 15 FPS
-@@ -610,7 +613,7 @@ void Conversation::runScriptExclusive() {
+@@ -610,7 +616,7 @@ void Conversation::runScriptExclusive() {
  		if (targetMillis > elapsedMillis) {
  			while (targetMillis > elapsedMillis) {
  				pumpMessages();
