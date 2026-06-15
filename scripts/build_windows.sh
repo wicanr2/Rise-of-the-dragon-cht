@@ -38,6 +38,8 @@ docker run --rm \
   echo "=== configure OK; building (this takes a few min) ==="
   make -j4 >/tmp/winmake.log 2>&1 || { echo "MAKE FAILED"; tail -40 /tmp/winmake.log; exit 1; }
   ls -la scummvm.exe
+  x86_64-w64-mingw32-strip scummvm.exe   # 93MB debug -> ~27MB; package_full.sh ships this
+  echo "stripped -> $(stat -c%s scummvm.exe) bytes"
   mkdir -p /work/dist/rotd-cht-windows-x86_64
   cp scummvm.exe /work/dist/rotd-cht-windows-x86_64/
   cp "$SDLDIR/bin/SDL2.dll" /work/dist/rotd-cht-windows-x86_64/ 2>/dev/null || true
@@ -50,3 +52,13 @@ docker run --rm \
   x86_64-w64-mingw32-objdump -p scummvm.exe 2>/dev/null | grep -i "DLL Name" | head -20
   chmod -R a+rw /work/dist/rotd-cht-windows-x86_64
 '
+
+# CJK assets + launcher that package_full.sh windows expects (on host; build/ must be populated).
+WINBUN="dist/rotd-cht-windows-x86_64"
+mkdir -p "$WINBUN/extra"
+for a in build/zh.dtr build/de.dtr build/dragon_zh24.dcjk build/dragon_zh16.dcjk; do
+  [ -f "$a" ] && cp -L "$a" "$WINBUN/extra/" || echo "  ! missing $a (run build_translation.py / build_cjk_font.py)"
+done
+# play-rotd-cht.bat: CRLF, points scummvm.exe at the sibling extra/ + game/.
+printf '@echo off\r\n"%%~dp0scummvm.exe" --extrapath="%%~dp0extra" --path="%%~dp0game" rise\r\n' > "$WINBUN/play-rotd-cht.bat"
+echo "win bundle ready: $(ls "$WINBUN")"
