@@ -132,7 +132,7 @@ void Dialog::drawForeground(surface, fontcol, txt) {
 | 路徑 | hook | 查表 |
 |---|---|---|
 | 對話內文 | `dialog.cpp drawForeground` | `lookupDialog(scene,num)` |
-| 對話名牌 / 選單 / REQ 標題 | `request.cpp drawHeader` | `lookupUI(header)`（名牌 = 對話冒號前，**用英文 key**，補 `UI:<英文名牌>` 即中文化，純資料）|
+| 對話名牌 / 選單 / REQ 標題 | `request.cpp drawHeader` | `lookupUI(header)`（名牌 = 對話冒號前，**用英文 key**，補 `UI:<英文名牌>` 即中文化，純資料）。⚠️ 名牌字的 y 用 `htop+2` 是對齊小英文 font baseline，CJK glyph 高 12（320-space）會往下沉壓進對話框 → 改成在框 `[htop, htop+hheight]` 內置中：`htop + (hheight - cjk.fontHeight())/2`（`hheight` 讀活的 font，免寫死）|
 | **TTM 畫面文字**（電腦/視訊電話/捷運/保全鍵盤）| `ttm.cpp` drawString op `0xa2X0` | `lookupUI(str)`（用 `tools/extract_ttm_strings.py` 從 `TT3:` chunk 抽 SET STRING `0xf1X0`，**別瞎玩遊戲找字**）|
 
 ## TTM 持久層 — 最深的坑（committed-flag + STORE AREA）
