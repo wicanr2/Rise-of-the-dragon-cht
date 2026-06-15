@@ -99,6 +99,16 @@ jobs:
         run: echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/23.2.8568313" >> $GITHUB_ENV
       - name: deps
         run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential
+      - name: fetch oboe into the NDK sysroot
+        run: |
+          SYSROOT="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          wget -q https://dl.google.com/dl/android/maven2/com/google/oboe/oboe/1.9.0/oboe-1.9.0.aar -O /tmp/oboe.aar
+          unzip -q /tmp/oboe.aar -d /tmp/oboe
+          OBOE_INC="$(dirname "$(find /tmp/oboe -name Oboe.h | head -1)")"   # .../include/oboe
+          cp -r "$OBOE_INC" "$SYSROOT/usr/include/"
+          SO="$(find /tmp/oboe -name liboboe.so -path '*arm64*' | head -1)"
+          cp "$SO" "$SYSROOT/usr/lib/aarch64-linux-android/"
+          test -f "$SYSROOT/usr/include/oboe/Oboe.h" && echo "oboe headers + lib installed"
       - name: clone + patch scummvm
         run: |
           git clone https://github.com/scummvm/scummvm
