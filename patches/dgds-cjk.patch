@@ -906,7 +906,7 @@ index 1eedfb4d..5b09063b 100644
  	const Common::SharedPtr<Image> &getIcons() { return _icons; }
  	GamePalettes *getGamePals() { return _gamePals; }
 diff --git a/engines/dgds/dialog.cpp b/engines/dgds/dialog.cpp
-index 95c84790..ff73b247 100644
+index 95c84790..d6ecc3bb 100644
 --- a/engines/dgds/dialog.cpp
 +++ b/engines/dgds/dialog.cpp
 @@ -213,6 +213,25 @@ void Dialog::drawType2(Graphics::ManagedSurface *dst, DialogDrawStage stage) {
@@ -935,7 +935,7 @@ index 95c84790..ff73b247 100644
  	if (stage == kDlgDrawStageBackground) {
  		if (engine->getGameId() == GID_DRAGON)
  			drawType2BackgroundDragon(dst, title);
-@@ -553,10 +572,60 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
+@@ -553,10 +572,63 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
  	// For now do the simplest wrapping, no highlighting.
  	assert(_state);
  
@@ -959,15 +959,18 @@ index 95c84790..ff73b247 100644
 +						zystart = _state->_loc.y;
 +					Graphics::TextAlign al = hasFlag(kDlgFlagLeftJust) ? Graphics::kTextAlignLeft : Graphics::kTextAlignCenter;
 +					// Highlight the hovered numbered option. English char offsets in _selectedAction
-+					// don't map onto the translated text, but options are numbered "N." in both
-+					// languages, so match the selection by that number instead.
++					// don't map onto the translated text, and strStart can point past the "N." label
++					// (so reading _str[strStart] often isn't the digit). Derive the option number from
++					// the selected action's INDEX in the action list instead -- options are listed
++					// 1..N in order, matching the "N." prefix the translator put on each line.
 +					int selOptNum = -1;
 +					if (_state->_selectedAction) {
-+						uint sp = _state->_selectedAction->strStart;
-+						while (sp < _str.size() && _str[sp] == ' ')
-+							sp++;
-+						if (sp < _str.size() && Common::isDigit(_str[sp]))
-+							selOptNum = _str[sp] - '0';
++						for (uint ai = 0; ai < _action.size(); ai++) {
++							if (_state->_selectedAction == &_action[ai]) {
++								selOptNum = (int)ai + 1;
++								break;
++							}
++						}
 +					}
 +					int curOpt = -1;
 +					for (uint zi = 0; zi < zlines.size(); zi++) {
@@ -997,7 +1000,7 @@ index 95c84790..ff73b247 100644
  	uint numPrintedLines = _countPrintedLines(lines);
  
  	int ystart = _state->_loc.y + (_state->_loc.height - (int)numPrintedLines * h) / 2;
-@@ -567,12 +636,12 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
+@@ -567,12 +639,12 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
  	int highlightEnd = INT_MAX;
  	if (_state->_selectedAction) {
  		// find the txt in the full dlg string, as action offsets include the heading
@@ -1012,7 +1015,7 @@ index 95c84790..ff73b247 100644
  
  	Graphics::TextAlign align;
  	int xwidth;
-@@ -666,7 +735,7 @@ void Dialog::updateSelectedAction(int delta) {
+@@ -666,7 +738,7 @@ void Dialog::updateSelectedAction(int delta) {
  
  	if (_action.size() > 1 || !delta) {
  		debug(1, "Dialog %d: update mouse to %d, %d (mouseloc %d, selnum %d)", _num, mouseX, mouseY, _state->_strMouseLoc, _lastSelectedDialogItemNum);

@@ -36,6 +36,7 @@ Domain glossary. Use these canonical terms in code, filenames, docs.
 | Chandi ? | 錢迪 | |
 | Qwong / Quong ? | 阿廣 | 唐人街角色 |
 | Hwang ? | 黃 | 唐人街角色 |
+| Chang Li ✓ | 張力 | 算命師/智者（scene 28），文言口吻，預言巴哈姆特之災。統一自舊譯 張禮/張莉 |
 | MTZ ? | MTZ | 劇情核心毒品（保留英文代號）|
 | NaPent ? | 神經素 NaPent | 道具（麻醉噴劑）|
 | Pleasure Dome ? | 歡愉穹頂 | 夜店場景 |
