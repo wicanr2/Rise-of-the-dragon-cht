@@ -1004,10 +1004,20 @@ index bb650cfa..fc89b8b7 100644
  			}
  
 diff --git a/engines/dgds/head.cpp b/engines/dgds/head.cpp
-index 177b6eb4..c5afca86 100644
+index 177b6eb4..f8fe2ac1 100644
 --- a/engines/dgds/head.cpp
 +++ b/engines/dgds/head.cpp
-@@ -569,8 +569,8 @@ void Conversation::runScriptExclusive() {
+@@ -250,6 +250,9 @@ void CDSTTMInterpreter::handleOperation(TTMEnviro &env_, TTMSeq &seq, uint16 op,
+ 		}
+ 		const Common::Rect rect = env._storedAreaRect.toCommonRect();
+ 		_storedAreaBuffer.blitFrom(_vm->_compositionBuffer, rect, rect);
++		// ROTD CHT: the talking-head animation covers this region (e.g. the videophone message header)
++		// -> drop the CJK overlay lines it overwrites so they don't float on top of the playing head.
++		_vm->getCJK().commitBg(rect);
+ 		env._cdsDidStoreArea = true;
+ 		break;
+ 	}
+@@ -569,8 +572,8 @@ void Conversation::runScriptExclusive() {
  
  	CursorMan.showMouse(false);
  
@@ -1018,7 +1028,7 @@ index 177b6eb4..c5afca86 100644
  
  	// If we have head data we should dim the palette
  	engine->dimPalForWillyDialog(_haveHeadData);
-@@ -596,10 +596,10 @@ void Conversation::runScriptExclusive() {
+@@ -596,10 +599,10 @@ void Conversation::runScriptExclusive() {
  			Common::Rect r = _drawRect.toCommonRect();
  			r.clip(Common::Rect(SCREEN_WIDTH, SCREEN_HEIGHT));
  			const byte *srcPtr = (const byte *)engine->_compositionBuffer.getPixels() + r.top * SCREEN_WIDTH + r.left;
@@ -1031,7 +1041,7 @@ index 177b6eb4..c5afca86 100644
  
  		frameCount++;
  		// Limit to 15 FPS
-@@ -610,7 +610,7 @@ void Conversation::runScriptExclusive() {
+@@ -610,7 +613,7 @@ void Conversation::runScriptExclusive() {
  		if (targetMillis > elapsedMillis) {
  			while (targetMillis > elapsedMillis) {
  				pumpMessages();
