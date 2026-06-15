@@ -30,8 +30,13 @@ docker run --rm -v "$PWD":/work -w /work ubuntu:24.04 bash -c '
   BT="$ANDROID_SDK_ROOT/build-tools/35.0.0"
 
   cd /work
-  rm -rf /tmp/stage; mkdir -p /tmp/stage/assets/games
-  cp -r build/android_games/riseofthedragon /tmp/stage/assets/games/
+  rm -rf /tmp/stage
+  # ScummVM extracts the APK inner "assets/" tree (assets/assets/...) to files/assets and, when
+  # assets_updated, mass-adds any game found under files/assets/games to the launcher. So the game
+  # must live at assets/assets/games/<id> (DOUBLE assets) AND be listed in assets/MD5SUMS -- otherwise
+  # it is neither extracted nor detected (launcher shows an empty game list).
+  mkdir -p /tmp/stage/assets/assets/games
+  cp -r build/android_games/riseofthedragon /tmp/stage/assets/assets/games/
   cp "'"$BASE"'" /tmp/work.apk
 
   # Runtime native-lib closure the CI base APK is missing (-> insta-crash on launch):
@@ -45,7 +50,14 @@ docker run --rm -v "$PWD":/work -w /work ubuntu:24.04 bash -c '
   cp "$(find /tmp/oboe -name liboboe.so -path "*arm64*" | head -1)" /tmp/stage/lib/arm64-v8a/liboboe.so
   cp build/android_libs/libc++_shared.so /tmp/stage/lib/arm64-v8a/libc++_shared.so
 
-  # inject game+assets + liboboe.so into the APK, drop the old signature
+  # Append the game files to MD5SUMS (paths are relative to files/, i.e. "assets/games/<id>/<f>").
+  # A changed MD5SUMS makes ScummVM treat assets as updated -> it re-extracts the inner assets tree
+  # (now incl. the game) and runs the one-shot bundled-game mass-add that registers it in the launcher.
+  unzip -o -q /tmp/work.apk "assets/MD5SUMS" -d /tmp/md5
+  ( cd /tmp/stage/assets && find assets/games -type f | sort | xargs md5sum ) >> /tmp/md5/assets/MD5SUMS
+  cp /tmp/md5/assets/MD5SUMS /tmp/stage/assets/MD5SUMS
+
+  # inject game (assets/assets/games) + libs (lib/) + updated MD5SUMS, drop the old signature
   ( cd /tmp/stage && zip -qr /tmp/work.apk assets lib )
   zip -q -d /tmp/work.apk "META-INF/*" >/dev/null 2>&1 || true
 
