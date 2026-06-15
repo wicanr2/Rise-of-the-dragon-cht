@@ -117,6 +117,8 @@ jobs:
           # fix insta-crash on fast/modern Android (S25+/Android 16): wait for a valid Surface
           # before eglCreateWindowSurface() instead of fatally aborting on a transient null surface
           git apply ../patches/android-surface-race.patch || patch -p1 < ../patches/android-surface-race.patch
+          # boot straight into the bundled ROTD game instead of the ScummVM launcher
+          git apply ../patches/android-autostart-rise.patch || patch -p1 < ../patches/android-autostart-rise.patch
       - name: configure + build APK
         run: |
           cd scummvm

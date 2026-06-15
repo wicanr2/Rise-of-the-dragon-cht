@@ -835,10 +835,10 @@ index 1eedfb4d..5b09063b 100644
  	const Common::SharedPtr<Image> &getIcons() { return _icons; }
  	GamePalettes *getGamePals() { return _gamePals; }
 diff --git a/engines/dgds/dialog.cpp b/engines/dgds/dialog.cpp
-index 95c84790..3ac1fd7e 100644
+index 95c84790..d827e351 100644
 --- a/engines/dgds/dialog.cpp
 +++ b/engines/dgds/dialog.cpp
-@@ -553,10 +553,37 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
+@@ -553,10 +553,60 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
  	// For now do the simplest wrapping, no highlighting.
  	assert(_state);
  
@@ -857,10 +857,33 @@ index 95c84790..3ac1fd7e 100644
 +					Common::StringArray zlines;
 +					cjk.wrapText(*tr, _state->_loc.width, zlines, afont);
 +					int zystart = _state->_loc.y + (_state->_loc.height - (int)zlines.size() * lh) / 2;
++					// Tall multi-option menus: anchor at the box top instead of overflowing above it.
++					if (zystart < _state->_loc.y)
++						zystart = _state->_loc.y;
 +					Graphics::TextAlign al = hasFlag(kDlgFlagLeftJust) ? Graphics::kTextAlignLeft : Graphics::kTextAlignCenter;
-+					for (uint zi = 0; zi < zlines.size(); zi++)
++					// Highlight the hovered numbered option. English char offsets in _selectedAction
++					// don't map onto the translated text, but options are numbered "N." in both
++					// languages, so match the selection by that number instead.
++					int selOptNum = -1;
++					if (_state->_selectedAction) {
++						uint sp = _state->_selectedAction->strStart;
++						while (sp < _str.size() && _str[sp] == ' ')
++							sp++;
++						if (sp < _str.size() && Common::isDigit(_str[sp]))
++							selOptNum = _str[sp] - '0';
++					}
++					int curOpt = -1;
++					for (uint zi = 0; zi < zlines.size(); zi++) {
++						const Common::String &zl = zlines[zi];
++						uint j = 0;
++						while (j < zl.size() && zl[j] == ' ')
++							j++;
++						if (j + 1 < zl.size() && Common::isDigit(zl[j]) && zl[j + 1] == '.')
++							curOpt = zl[j] - '0';
++						uint16 col = (selOptNum >= 0 && curOpt == selOptNum) ? _selectonFontCol : fontcol;
 +						cjk.deferLine(_state->_loc.x, zystart + zi * lh, _state->_loc.width,
-+						              fontcol, zlines[zi], al, afont);
++						              col, zl, al, afont);
++					}
 +					return;
 +				}
 +				deOverride = tr; // Deutsch: Latin text, render with the original game font below
@@ -877,7 +900,7 @@ index 95c84790..3ac1fd7e 100644
  	uint numPrintedLines = _countPrintedLines(lines);
  
  	int ystart = _state->_loc.y + (_state->_loc.height - (int)numPrintedLines * h) / 2;
-@@ -567,12 +594,12 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
+@@ -567,12 +617,12 @@ void Dialog::drawForeground(Graphics::ManagedSurface *dst, uint16 fontcol, const
  	int highlightEnd = INT_MAX;
  	if (_state->_selectedAction) {
  		// find the txt in the full dlg string, as action offsets include the heading
@@ -892,7 +915,7 @@ index 95c84790..3ac1fd7e 100644
  
  	Graphics::TextAlign align;
  	int xwidth;
-@@ -666,7 +693,7 @@ void Dialog::updateSelectedAction(int delta) {
+@@ -666,7 +716,7 @@ void Dialog::updateSelectedAction(int delta) {
  
  	if (_action.size() > 1 || !delta) {
  		debug(1, "Dialog %d: update mouse to %d, %d (mouseloc %d, selnum %d)", _num, mouseX, mouseY, _state->_strMouseLoc, _lastSelectedDialogItemNum);
