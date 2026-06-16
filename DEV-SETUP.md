@@ -21,7 +21,7 @@
 ## 重建步驟
 
 ```bash
-tar xzf rotd-cht-DEV-ENV.tar.gz && cd rise-of-the-dragon
+tar xzf rotd-cht-DEV+MATERIALS.tar.gz && cd rise-of-the-dragon
 
 # 依賴 (Debian/Ubuntu)
 sudo apt install build-essential git libsdl2-dev libfreetype-dev libpng-dev \
