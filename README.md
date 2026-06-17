@@ -171,8 +171,10 @@
 老玩家當年想都不敢想：2053 年的洛杉磯，現在裝在口袋裡。本專案的 Android 版已在**實機 Galaxy S25（Android 16）**驗證可玩 —— 而且不是丟進 ScummVM launcher 自己找遊戲，是**點 APK 圖示直接進孟波的公寓**。
 
 <p align="center">
-  <img src="screenshots/android_s25_launcher.png" width="38%" alt="Galaxy S25（Android 16）上，ScummVM 已認得本機注入的繁中遊戲"/>
+  <img src="screenshots/android_demo.gif" width="62%" alt="Galaxy S25 實機錄影：Dynamix logo → 中文「跳過序章／播放序章」選單 → 金色「城市獵人」標題"/>
 </p>
+
+> Galaxy S25（Android 16）實機錄影：開機 Dynamix logo → 中文序章選單（跳過序章／播放序章）→ 金色「城市獵人」標題，整段都跑在手機上 —— 連標題那行金字，也跟桌面版一樣是引擎即時 overlay。
 
 操作對應行動裝置做了調整：**d-pad** 移游標、**滑鼠左右鍵**對應點擊、**F8** 一樣即時切語言。整個流程是 CI 出一個**空殼 base APK**（只有 patched 引擎，不含任何遊戲檔），在本機把你**合法擁有**的遊戲注入進去、重簽名，得到一個自留的完整 APK。注入只在本機跑、絕不上傳 —— 技術細節見〈[行動版注入](#android-tech)〉。
 
