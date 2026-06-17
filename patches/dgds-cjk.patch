@@ -162,16 +162,19 @@ index 00000000..16d0eb13
 +#endif
 diff --git a/engines/dgds/cjk.cpp b/engines/dgds/cjk.cpp
 new file mode 100644
-index 00000000..8e5dbc5e
+index 00000000..acc4f773
 --- /dev/null
 +++ b/engines/dgds/cjk.cpp
-@@ -0,0 +1,336 @@
+@@ -0,0 +1,397 @@
 +/* ScummVM dgds CJK localization support (Rise of the Dragon CHT). Non-upstream. */
 +
 +#include "common/file.h"
 +#include "common/debug.h"
++#include "common/system.h"
++#include "graphics/paletteman.h"
 +#include "dgds/cjk.h"
 +#include "dgds/font.h"
++#include "dgds/dgds.h"
 +
 +namespace Dgds {
 +
@@ -493,21 +496,79 @@ index 00000000..8e5dbc5e
 +	}
 +}
 +
++// Nearest CLUT8 palette index to an RGB target -- the title screen has its own palette, so we
++// pick the closest existing gold / outline colors rather than assuming fixed indices.
++static byte nearestPalIdx(const byte *pal, int r, int g, int b) {
++	int best = 0; long bestd = 0x7fffffff;
++	for (int i = 0; i < 256; i++) {
++		long dr = pal[i * 3] - r, dg = pal[i * 3 + 1] - g, db = pal[i * 3 + 2] - b;
++		long d = dr * dr + dg * dg + db * db;
++		if (d < bestd) { bestd = d; best = i; }
++	}
++	return (byte)best;
++}
++
++// Draw 「城市獵人」 (City Hunter) in gold with a dark outline, centered across the TOP of the
++// "Rise of the Dragon" title screen -- a nod to the protagonist's bootleg name 孟波. The bottom of
++// the title is filled by the gold "Dragon" lettering (no room there), so the caption sits on the
++// clean carved stone above the dragon-triangle emblem. Matches the look of Willy Beamish's CHT
++// subtitle: dark 8-direction outline then a gold body, color-matched to the live title palette.
++void CJKSupport::drawTitleSubtitle(Graphics::ManagedSurface *dst) {
++	if (!_glyphs)
++		return;
++	byte pal[768];
++	g_system->getPaletteManager()->grabPalette(pal, 0, 256);
++	const byte gold = nearestPalIdx(pal, 238, 165, 0);
++	const byte dark = nearestPalIdx(pal, 60, 18, 6);
++	static const byte s[] = {0xab, 0xb0, 0xa5, 0xab, 0xc2, 0x79, 0xa4, 0x48}; // 城市獵人 (Big5)
++	const int nch = 4;
++	const int adv = _w + 4;              // 24 + 4 spacing
++	const int totalw = nch * adv - 4;    // 108 at _w=24
++	int x = (dst->w - totalw) / 2;       // centered (~266 on the 640-wide overlay)
++	const int y = 20;                    // top stone band; ~16px clear of the emblem apex (~y60)
++	static const int ox[] = {-2, 2, 0, 0, -2, 2, -2, 2};
++	static const int oy[] = {0, 0, -2, 2, -2, -2, 2, 2};
++	for (int c = 0; c < nch; c++) {
++		int idx = big5LinearIndex(s[c * 2], s[c * 2 + 1]);
++		if (idx < 0) continue;
++		int gx = x + c * adv;
++		for (int o = 0; o < 8; o++)
++			drawGlyph(dst, idx, gx + ox[o], y + oy[o], dark);
++		drawGlyph(dst, idx, gx, y, gold);
++	}
++}
++
 +void CJKSupport::flushDeferred(Graphics::ManagedSurface *dst) {
 +	// Persistent TTM background text first, then per-frame dialogs/menus on top.
 +	for (const DeferredLine &dl : _deferredBg)
 +		drawDeferredLine(dst, dl);
 +	for (const DeferredLine &dl : _deferred)
 +		drawDeferredLine(dst, dl);
++
++	// Rise of the Dragon title: SYMBOL.SCR is the carved dragon-triangle screen held under the gold
++	// "Rise of the Dragon" lettering. Latch a few frames so the caption can't flicker on a 1-frame
++	// gap, and disarm on any other named screen so it never leaks into gameplay.
++	DgdsEngine *eng = DgdsEngine::getInstance();
++	if (eng->getGameId() == GID_DRAGON) {
++		const Common::String &bg = eng->getBackgroundFile();
++		if (bg.equalsIgnoreCase("SYMBOL.SCR"))
++			_titleTicks = 8;
++		else if (!bg.empty())
++			_titleTicks = 0;
++		if (isCJK() && _titleTicks > 0) {
++			_titleTicks--;
++			drawTitleSubtitle(dst);
++		}
++	}
 +}
 +
 +} // namespace Dgds
 diff --git a/engines/dgds/cjk.h b/engines/dgds/cjk.h
 new file mode 100644
-index 00000000..0f1a3eb8
+index 00000000..7c22eecb
 --- /dev/null
 +++ b/engines/dgds/cjk.h
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,122 @@
 +/* ScummVM dgds CJK / multi-language localization support (Rise of the Dragon CHT).
 + * Non-upstream: engine-side translation overlays + bitmap fonts + display-mode cycle.
 + */
@@ -597,6 +658,7 @@ index 00000000..0f1a3eb8
 +	void selectActiveFont();
 +	const byte *glyphPtr(int idx) const;
 +	void drawGlyph(Graphics::ManagedSurface *dst, int idx, int x, int y, uint32 color) const;
++	void drawTitleSubtitle(Graphics::ManagedSurface *dst); // 城市獵人 caption on the ROTD title screen
 +	const Common::HashMap<Common::String, Common::String> &activeOverlay() const;
 +	struct DeferredLine;
 +	void drawDeferredLine(Graphics::ManagedSurface *dst, const DeferredLine &dl);
@@ -610,6 +672,7 @@ index 00000000..0f1a3eb8
 +	byte _w, _h, _bpr;
 +	uint32 _numGlyphs;
 +	byte *_glyphs;
++	int _titleTicks = 0; // frames remaining to draw the 城市獵人 title caption (latched on SYMBOL.SCR)
 +
 +	Common::HashMap<Common::String, Common::String> _zh, _de;
 +
