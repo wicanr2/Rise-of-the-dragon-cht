@@ -1674,10 +1674,10 @@ index 36ed1bc4..e8c5345e 100644
  	case 0xa300:
 diff --git a/engines/dgds/voice.cpp b/engines/dgds/voice.cpp
 new file mode 100644
-index 00000000..bdfd3cca
+index 00000000..5fc0bc02
 --- /dev/null
 +++ b/engines/dgds/voice.cpp
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,153 @@
 +/* ScummVM dgds voice-acting support (Rise of the Dragon CHT). Non-upstream. */
 +
 +#include "common/file.h"
@@ -1696,6 +1696,7 @@ index 00000000..bdfd3cca
 +	case kVoiceEN: return "voice_en";
 +	case kVoiceJA: return "voice_ja";
 +	case kVoiceZH: return "voice_zh";
++	case kVoiceDE: return "voice_de";
 +	default:       return nullptr;
 +	}
 +}
@@ -1712,6 +1713,7 @@ index 00000000..bdfd3cca
 +	case kVoiceEN: return "English voice";
 +	case kVoiceJA: return "Japanese voice";
 +	case kVoiceZH: return "Chinese voice";
++	case kVoiceDE: return "German voice";
 +	default:       return "voice off";
 +	}
 +}
@@ -1735,8 +1737,8 @@ index 00000000..bdfd3cca
 +	// 2) Which voice sets are actually on disk (voice_en/ etc. as a subdir of the game path).
 +	_avail.clear();
 +	Common::FSNode game(ConfMan.getPath("path"));
-+	const VoiceMode modes[] = { kVoiceEN, kVoiceJA, kVoiceZH };
-+	for (int i = 0; i < 3; i++) {
++	const VoiceMode modes[] = { kVoiceEN, kVoiceJA, kVoiceZH, kVoiceDE };
++	for (int i = 0; i < 4; i++) {
 +		Common::FSNode d = game.getChild(dirForMode(modes[i]));
 +		if (d.exists() && d.isDirectory())
 +			_avail.push_back(modes[i]);
@@ -1756,10 +1758,10 @@ index 00000000..bdfd3cca
 +}
 +
 +void VoiceSupport::cycleMode() {
-+	// off -> EN -> JA -> ZH -> off, skipping any set that isn't present.
++	// off -> EN -> JA -> ZH -> DE -> off, skipping any set that isn't present.
 +	VoiceMode m = _mode;
-+	for (int i = 0; i < 4; i++) {
-+		m = (VoiceMode)((m + 1) % 4);
++	for (int i = 0; i < 5; i++) {
++		m = (VoiceMode)((m + 1) % 5);
 +		if (m == kVoiceOff || hasSet(m)) {
 +			setMode(m);
 +			return;
@@ -1777,10 +1779,10 @@ index 00000000..bdfd3cca
 +	Common::FSNode vdir = Common::FSNode(ConfMan.getPath("path")).getChild(dir);
 +	Common::String key = Common::String::format("%d:%d", sceneNum, dlgNum);
 +
-+	// Chinese is TTS: one self-contained clip per dialog, named by scene:num (e.g. 8_4.wav) --
-+	// it has no disc-clip split, and naming by scene:num avoids the English manifest's "one clip
++	// Chinese & German are TTS: one self-contained clip per dialog, named by scene:num (e.g.
++	// 8_4.wav) -- no disc-clip split, and scene:num naming avoids the English manifest's "one clip
 +	// reused for several dialogs" collisions. Play it straight, at the file's own sample rate.
-+	if (_mode == kVoiceZH) {
++	if (_mode == kVoiceZH || _mode == kVoiceDE) {
 +		Common::FSNode node = vdir.getChild(Common::String::format("%d_%d.wav", sceneNum, dlgNum));
 +		Common::SeekableReadStream *s = node.createReadStream();
 +		if (!s)
@@ -1831,10 +1833,10 @@ index 00000000..bdfd3cca
 +} // namespace Dgds
 diff --git a/engines/dgds/voice.h b/engines/dgds/voice.h
 new file mode 100644
-index 00000000..88d90a6b
+index 00000000..c5880c54
 --- /dev/null
 +++ b/engines/dgds/voice.h
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,58 @@
 +/* ScummVM dgds voice-acting support (Rise of the Dragon CHT). Non-upstream.
 + *
 + * Plays Sega CD (English / Japanese) or Chinese-TTS voice clips in sync with the
@@ -1858,6 +1860,7 @@ index 00000000..88d90a6b
 +	kVoiceEN,    // US Sega CD English voice acting
 +	kVoiceJA,    // Japan Sega CD Japanese dub
 +	kVoiceZH,    // Chinese TTS dub
++	kVoiceDE,    // German TTS dub
 +};
 +
 +// Deep module: hide the manifest + per-mode wav lookup + mixer behind a narrow interface.
