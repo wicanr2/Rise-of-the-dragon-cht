@@ -11,7 +11,18 @@ docker run --rm \
   set -e
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq >/dev/null 2>&1
-  apt-get install -y -qq g++-mingw-w64-x86-64 mingw-w64-tools curl xz-utils >/dev/null 2>&1
+  apt-get install -y -qq g++-mingw-w64-x86-64 mingw-w64-tools curl xz-utils make >/dev/null 2>&1
+  # libogg + libvorbis (static) into the mingw sysroot so ScummVM can decode the Ogg voice
+  PFX=/usr/x86_64-w64-mingw32
+  for lib in ogg/libogg-1.3.5 vorbis/libvorbis-1.3.7; do
+    nm=$(basename "$lib"); cd /tmp
+    curl -fsSL -o "$nm.tar.gz" "https://downloads.xiph.org/releases/$lib.tar.gz"
+    tar xf "$nm.tar.gz"; cd "$nm"
+    ./configure --host=x86_64-w64-mingw32 --prefix="$PFX" --enable-static --disable-shared >/tmp/"$nm".log 2>&1 \
+      || { echo "$nm configure FAILED"; tail -20 /tmp/"$nm".log; exit 1; }
+    make -j4 >/dev/null 2>&1 && make install >/dev/null 2>&1 || { echo "$nm build FAILED"; exit 1; }
+  done
+  echo "=== libogg + libvorbis installed to mingw sysroot ==="
   # SDL2 mingw development libraries
   cd /tmp
   curl -fsSL -o sdl2.tar.gz \
@@ -30,7 +41,7 @@ docker run --rm \
     --host=$HOST \
     --disable-all-engines --enable-engine=dgds \
     --with-sdl-prefix="$SDLDIR/bin" \
-    --disable-fluidsynth --disable-flac --disable-mad --disable-vorbis \
+    --disable-fluidsynth --disable-flac --disable-mad \
     --disable-theoradec --disable-faad --disable-mpeg2 --disable-a52 \
     --disable-libcurl --disable-sndio --disable-timidity --disable-sparkle \
     --disable-nuked-opl --disable-eventrecorder \
