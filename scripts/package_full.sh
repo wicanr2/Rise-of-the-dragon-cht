@@ -22,6 +22,22 @@ copy_game() {
       ! -iname '*.dcjk' ! -iname '*.dtr' ! -iname 'autopilot.txt' \
       -exec cp {} "$OLDPWD/$1/game/" \; )
 }
+
+# Copy the 4 voice sets (Ogg only -- ~99MB vs ~788MB wav) + the dialog->clip map into game/,
+# next to the game data where the engine (ConfMan path) looks them up. Skip with VOICE=0.
+VOICE="${VOICE:-1}"
+copy_voice() {
+  [ "$VOICE" = 1 ] || return 0
+  local g="$1/game"
+  [ -f build/voice.map ] && cp build/voice.map "$g/voice.map"
+  for pair in "en_voice:voice_en" "segacd_ja/voice_wav:voice_ja" "zh_voice:voice_zh" "de_voice:voice_de"; do
+    local src="${pair%%:*}" dst="${pair##*:}"
+    if ls "$src"/*.ogg >/dev/null 2>&1; then
+      mkdir -p "$g/$dst"; cp "$src"/*.ogg "$g/$dst/"
+    fi
+  done
+  echo "  + voice: $(du -ch "$g"/voice_*/*.ogg 2>/dev/null | tail -1 | cut -f1) Ogg"
+}
 readme() {  # $1 = dir, $2 = "執行的東西" line
   cat > "$1/README.txt" <<DOC
 Rise of the Dragon 繁體中文版 — 完整自留包
@@ -45,7 +61,7 @@ build_linux() {
   local N=rotd-cht-FULL-linux-x86_64 O=dist/rotd-cht-FULL-linux-x86_64
   rm -rf "$O"; mkdir -p "$O"
   cp -r "$BUNDLE/bin" "$BUNDLE/lib" "$BUNDLE/share" "$BUNDLE/rotd-cht.sh" "$O/"
-  copy_game "$O"; readme "$O" "執行 ./rotd-cht.sh —— 會自動偵測同目錄的 game/ 並用中文啟動。"
+  copy_game "$O"; copy_voice "$O"; readme "$O" "執行 ./rotd-cht.sh —— 會自動偵測同目錄的 game/ 並用中文啟動。"
   chmod +x "$O/rotd-cht.sh"; echo "[linux] $O"; archive_tar "$N"
 }
 build_appimage() {
@@ -53,7 +69,7 @@ build_appimage() {
   local N=rotd-cht-FULL-appimage O=dist/rotd-cht-FULL-appimage
   rm -rf "$O"; mkdir -p "$O"
   cp "$APPIMG" "$O/"
-  copy_game "$O"; readme "$O" "執行旁邊的 Rise-of-the-Dragon-CHT-x86_64.AppImage —— 會自動偵測同目錄的 game/。"
+  copy_game "$O"; copy_voice "$O"; readme "$O" "執行旁邊的 Rise-of-the-Dragon-CHT-x86_64.AppImage —— 會自動偵測同目錄的 game/。"
   echo "[appimage] $O"; archive_tar "$N"
 }
 build_windows() {
@@ -62,7 +78,7 @@ build_windows() {
   rm -rf "$O"; mkdir -p "$O"
   cp "$WINBUN/scummvm.exe" "$WINBUN/SDL2.dll" "$WINBUN/play-rotd-cht.bat" "$O/"
   cp -r "$WINBUN/extra" "$O/"
-  copy_game "$O"; readme "$O" "雙擊 play-rotd-cht.bat —— 會自動偵測同目錄的 game/ 並用中文啟動。"
+  copy_game "$O"; copy_voice "$O"; readme "$O" "雙擊 play-rotd-cht.bat —— 會自動偵測同目錄的 game/ 並用中文啟動。"
   echo "[windows] $O"; archive_zip "$N"
 }
 
@@ -79,7 +95,7 @@ build_mac() {
   tar xzf "$CIAPP" -C "$O"                                   # -> "Rise of the Dragon CHT.app"
   local EXTRA="$O/Rise of the Dragon CHT.app/Contents/Resources/extra"
   cp build/de.dtr "$EXTRA/" 2>/dev/null || true             # CI doesn't build de.dtr; add it locally
-  copy_game "$O"
+  copy_game "$O"; copy_voice "$O"
   cat > "$O/玩-rotd-cht.command" <<'CMD'
 #!/bin/bash
 # 雙擊我即可（首次右鍵→打開 以過 Gatekeeper）。用內附 game/ 中文啟動。
