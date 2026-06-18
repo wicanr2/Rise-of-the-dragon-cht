@@ -1,9 +1,9 @@
 diff --git a/engines/dgds/autopilot.cpp b/engines/dgds/autopilot.cpp
 new file mode 100644
-index 00000000..b9207054
+index 00000000..7874a137
 --- /dev/null
 +++ b/engines/dgds/autopilot.cpp
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,102 @@
 +/* ScummVM dgds autopilot (ROTD CHT). See autopilot.h. */
 +
 +#include "common/file.h"
@@ -37,6 +37,7 @@ index 00000000..b9207054
 +		else if (op == "shot") c.op = 'p';
 +		else if (op == "wait") c.op = 'w';
 +		else if (op == "lang") c.op = 'g';
++		else if (op == "voice") c.op = 'V';
 +		else if (op == "quit") c.op = 'q';
 +		else continue;
 +		_cmds.push_back(c);
@@ -87,6 +88,10 @@ index 00000000..b9207054
 +		break;
 +	case 'g': // set display mode (0=Orig/EN 1=中文24 2=中文16 3=Deutsch)
 +		engine->getCJK().setMode((DisplayMode)c.arg);
++		_wait = 3;
++		break;
++	case 'V': // set voice mode (0=off 1=EN 2=JA 3=中文)
++		engine->getVoice().setMode((VoiceMode)c.arg);
 +		_wait = 3;
 +		break;
 +	case 'w':
@@ -692,7 +697,7 @@ index 00000000..7c22eecb
 +
 +#endif
 diff --git a/engines/dgds/dgds.cpp b/engines/dgds/dgds.cpp
-index 63976485..4d4e26c4 100644
+index 63976485..bcdf6f89 100644
 --- a/engines/dgds/dgds.cpp
 +++ b/engines/dgds/dgds.cpp
 @@ -35,6 +35,8 @@
@@ -704,7 +709,24 @@ index 63976485..4d4e26c4 100644
  
  #include "engines/advancedDetector.h"
  #include "engines/util.h"
-@@ -204,6 +206,10 @@ bool DgdsEngine::changeScene(int sceneNum) {
+@@ -77,7 +79,7 @@ const byte DgdsEngine::HOC_CHAR_SWAP_ICONS[] = { 0, 20, 21, 22 };
+ 
+ DgdsEngine::DgdsEngine(OSystem *syst, const ADGameDescription *gameDesc)
+ 	: Engine(syst), _fontManager(nullptr), _console(nullptr), _inventory(nullptr),
+-	_soundPlayer(nullptr), _decompressor(nullptr), _scene(nullptr), _shellGame(nullptr),
++	_soundPlayer(nullptr), _voice(nullptr), _decompressor(nullptr), _scene(nullptr), _shellGame(nullptr),
+ 	_hocIntro(nullptr), _gdsScene(nullptr), _resource(nullptr), _gamePals(nullptr), _gameGlobals(nullptr),
+ 	_detailLevel(kDgdsDetailHigh), _textSpeed(5), _justChangedScene1(false),
+ 	_random("dgds"), _currentCursor(-1), _menuToTrigger(kMenuNone), _isLoading(true), _flipMode(false),
+@@ -127,6 +129,7 @@ DgdsEngine::~DgdsEngine() {
+ 	delete _gdsScene;
+ 	delete _gameGlobals;
+ 	delete _soundPlayer;
++	delete _voice;
+ 	delete _fontManager;
+ 	delete _menu;
+ 	delete _adsInterp;
+@@ -204,6 +207,10 @@ bool DgdsEngine::changeScene(int sceneNum) {
  		_backgroundBuffer.fillRect(Common::Rect(SCREEN_WIDTH, SCREEN_HEIGHT), 0);
  	}
  
@@ -715,7 +737,7 @@ index 63976485..4d4e26c4 100644
  	_scene->runLeaveSceneOps();
  
  	// store the last non-inventory scene num
-@@ -334,7 +340,10 @@ void DgdsEngine::checkDrawInventoryButton() {
+@@ -334,7 +341,10 @@ void DgdsEngine::checkDrawInventoryButton() {
  void DgdsEngine::init(bool restarting) {
  	if (!restarting) {
  		// Init things with no state only once
@@ -727,7 +749,15 @@ index 63976485..4d4e26c4 100644
  
  		_console = new Console(this);
  		_resource = new ResourceManager();
-@@ -384,6 +393,60 @@ void DgdsEngine::init(bool restarting) {
+@@ -362,6 +372,7 @@ void DgdsEngine::init(bool restarting) {
+ 
+ 	_gamePals = new GamePalettes(_resource, _decompressor);
+ 	_soundPlayer = new Sound(_mixer, _resource, _decompressor);
++	_voice = new VoiceSupport(_mixer); // ROTD CHT voice acting; load() once search paths are set
+ 	_scene = new SDSScene();
+ 	_gdsScene = new GDSScene();
+ 	_fontManager = new FontManager();
+@@ -384,6 +395,60 @@ void DgdsEngine::init(bool restarting) {
  	g_system->fillScreen(0);
  }
  
@@ -788,17 +818,19 @@ index 63976485..4d4e26c4 100644
  void DgdsEngine::loadGameFiles() {
  	REQFileData invRequestData;
  	REQFileData vcrRequestData;
-@@ -391,6 +454,9 @@ void DgdsEngine::loadGameFiles() {
+@@ -391,6 +456,11 @@ void DgdsEngine::loadGameFiles() {
  
  	_fontManager->loadFonts(getGameId(), _resource, _decompressor);
  
 +	// ROTD CHT: load 24x24 Big5 CJK font + translation overlay (sit next to game data).
 +	_cjk.load();
++	// ROTD CHT: load the dialog->voice map + detect which voice_*/ sets are present.
++	_voice->load();
 +
  	switch (getGameId()) {
  	case GID_DRAGON:
  		if (getPlatform() == Common::kPlatformDOS)
-@@ -487,6 +553,22 @@ void DgdsEngine::loadGameFiles() {
+@@ -487,6 +557,22 @@ void DgdsEngine::loadGameFiles() {
  
  	debug(1, "Parsed Inv Request:\n%s", invRequestData.dump().c_str());
  	debug(1, "Parsed VCR Request:\n%s", vcrRequestData.dump().c_str());
@@ -821,7 +853,7 @@ index 63976485..4d4e26c4 100644
  }
  
  void DgdsEngine::loadRestartFile() {
-@@ -530,6 +612,14 @@ void DgdsEngine::pumpMessages() {
+@@ -530,6 +616,18 @@ void DgdsEngine::pumpMessages() {
  			case kDgdsKeyToggleClock:
  				_clock.toggleVisibleUser();
  				break;
@@ -833,10 +865,14 @@ index 63976485..4d4e26c4 100644
 +				if (_menu->menuShown())
 +					_menu->redrawCurrent();
 +				break;
++			case kDgdsKeyToggleVoice:
++				_voice->cycleMode();
++				debug(1, "Voice -> %s", _voice->modeName());
++				break;
  			case kDgdsKeyNextChoice:
  				if (_menu->menuShown())
  					_menu->nextChoice();
-@@ -574,7 +664,8 @@ void DgdsEngine::pumpMessages() {
+@@ -574,7 +672,8 @@ void DgdsEngine::pumpMessages() {
  				|| ev.type == Common::EVENT_RBUTTONDOWN || ev.type == Common::EVENT_RBUTTONUP
  				|| ev.type == Common::EVENT_MOUSEMOVE) {
  			_lastMouseEvent = ev.type;
@@ -846,7 +882,7 @@ index 63976485..4d4e26c4 100644
  			// We can keep going if there were multiple moves or a move then a button, but
  			// stop if there was a button event to process it now.
  			if (_lastMouseEvent != Common::EVENT_MOUSEMOVE)
-@@ -623,6 +714,9 @@ Common::Error DgdsEngine::run() {
+@@ -623,6 +722,9 @@ Common::Error DgdsEngine::run() {
  	init(false);
  	loadGameFiles();
  
@@ -856,7 +892,7 @@ index 63976485..4d4e26c4 100644
  	// If a savegame was selected from the launcher, load it now.
  	int saveSlot = ConfMan.getInt("save_slot");
  	if (saveSlot != -1)
-@@ -674,6 +768,28 @@ Common::Error DgdsEngine::run() {
+@@ -674,6 +776,28 @@ Common::Error DgdsEngine::run() {
  		} else {
  			debug(10, "****  Starting frame %d time %d ****", frameCount, _thisFrameMs);
  
@@ -885,7 +921,7 @@ index 63976485..4d4e26c4 100644
  			bool clearedDlg = _scene->checkForClearedDialogs();
  
  			// Willy pauses script execution when the palette is faded by an active
-@@ -789,7 +905,7 @@ Common::Error DgdsEngine::run() {
+@@ -789,7 +913,7 @@ Common::Error DgdsEngine::run() {
  			bool gameRunning = (!haveActiveDialog && _gameGlobals->getGlobal(0x57));
  			_clock.update(gameRunning && shouldRunScripts);
  
@@ -894,7 +930,7 @@ index 63976485..4d4e26c4 100644
  
  			_justChangedScene1 = false;
  		}
-@@ -807,7 +923,11 @@ Common::Error DgdsEngine::run() {
+@@ -807,7 +931,11 @@ Common::Error DgdsEngine::run() {
  				CursorMan.showMouse(false);
  		}
  
@@ -908,27 +944,29 @@ index 63976485..4d4e26c4 100644
  		//
  		// Limit frame rate to 15 FPS
 diff --git a/engines/dgds/dgds.h b/engines/dgds/dgds.h
-index 1eedfb4d..5b09063b 100644
+index 1eedfb4d..22f3fb7e 100644
 --- a/engines/dgds/dgds.h
 +++ b/engines/dgds/dgds.h
-@@ -36,6 +36,8 @@
+@@ -36,6 +36,9 @@
  #include "dgds/resource.h"
  #include "dgds/clock.h"
  #include "dgds/menu.h"
 +#include "dgds/cjk.h"
++#include "dgds/voice.h"
 +#include "dgds/autopilot.h"
  
  
  namespace Dgds {
-@@ -92,6 +94,7 @@ enum DgdsKeyEvent {
+@@ -92,6 +95,8 @@ enum DgdsKeyEvent {
  	kDgdsKeyPickUp,
  	kDgdsKeyLook,
  	kDgdsKeyActivate,
 +	kDgdsKeyToggleLanguage, // ROTD CHT: cycle UI language (original / 繁中)
++	kDgdsKeyToggleVoice,    // ROTD CHT: cycle voice acting (off / EN / JA / 中文)
  };
  
  enum DgdsMouseCursor {
-@@ -121,6 +124,10 @@ class DgdsEngine : public Engine {
+@@ -121,6 +126,10 @@ class DgdsEngine : public Engine {
  public:
  	Sound *_soundPlayer;
  	Graphics::ManagedSurface _compositionBuffer;
@@ -939,20 +977,22 @@ index 1eedfb4d..5b09063b 100644
  
  	static const byte HOC_CHAR_SWAP_ICONS[];
  
-@@ -156,6 +163,8 @@ private:
+@@ -156,6 +165,9 @@ private:
  	ChinaTrain *_chinaTrain;
  
  	FontManager *_fontManager;
 +	CJKSupport _cjk; // ROTD CHT: translation overlay + Big5 font + language switch
++	VoiceSupport *_voice; // ROTD CHT: Sega CD / TTS voice acting (needs the mixer, so heap)
 +	Autopilot _autopilot; // ROTD CHT: script-driven game-tester mode
  	Common::SharedPtr<Image> _corners;
  	Common::SharedPtr<Image> _icons;
  
-@@ -214,6 +223,19 @@ public:
+@@ -214,6 +226,20 @@ public:
  	SDSScene *getScene() { return _scene; }
  	GDSScene *getGDSScene() { return _gdsScene; }
  	const FontManager *getFontMan() const { return _fontManager; }
 +	CJKSupport &getCJK() { return _cjk; }
++	VoiceSupport &getVoice() { return *_voice; }
 +
 +	// Virtual-screen indirection for the hi-res CJK text layer. Engine code uses
 +	// these instead of g_system->{lockScreen,unlockScreen,copyRectToScreen,updateScreen}.
@@ -1268,27 +1308,29 @@ index 57e64cdc..4d961fd5 100644
  
  	void setRequestData(const REQFileData &data);
 diff --git a/engines/dgds/metaengine.cpp b/engines/dgds/metaengine.cpp
-index 0ef2da51..6e5c5725 100644
+index 0ef2da51..9de37b99 100644
 --- a/engines/dgds/metaengine.cpp
 +++ b/engines/dgds/metaengine.cpp
-@@ -82,6 +82,7 @@ Common::KeymapArray DgdsMetaEngine::initKeymaps(const char *target) const {
+@@ -82,6 +82,8 @@ Common::KeymapArray DgdsMetaEngine::initKeymaps(const char *target) const {
  		{ Dgds::kDgdsKeyPickUp, "PICK_UP", _("Pick up / Operate"), "SPACE", "KP5" },
  		{ Dgds::kDgdsKeyLook, "LOOK", _("Look"), "RETURN", "," },
  		{ Dgds::kDgdsKeyActivate, "ACTIVATE", _("Activate Inventory Object"), "BACKSPACE", nullptr },
 +		{ Dgds::kDgdsKeyToggleLanguage, "TOGGLE_LANG", _("Toggle language (English / Chinese)"), "F8", "C+S+l" },
++		{ Dgds::kDgdsKeyToggleVoice, "TOGGLE_VOICE", _("Toggle voice (off / English / Japanese / Chinese)"), "F9", "C+S+v" },
  	};
  
  	Common::Keymap *map = new Common::Keymap(Common::Keymap::kKeymapTypeGame, target, _("Game Keys"));
 diff --git a/engines/dgds/module.mk b/engines/dgds/module.mk
-index 2dc84cdb..42346018 100644
+index 2dc84cdb..3e48fcb6 100644
 --- a/engines/dgds/module.mk
 +++ b/engines/dgds/module.mk
-@@ -2,6 +2,8 @@ MODULE := engines/dgds
+@@ -2,6 +2,9 @@ MODULE := engines/dgds
  
  MODULE_OBJS := \
  	ads.o \
 +	autopilot.o \
 +	cjk.o \
++	voice.o \
  	clock.o \
  	console.o \
  	decompress.o \
@@ -1350,7 +1392,7 @@ index 60bff928..03b1da2c 100644
  			dst->hLine(hleft - 3, htop, hright, boxTopColor);
  			dst->vLine(hright, htop + 1, hbottom, boxTopColor);
 diff --git a/engines/dgds/scene.cpp b/engines/dgds/scene.cpp
-index a83096e7..1893f8ff 100644
+index a83096e7..1c880bc9 100644
 --- a/engines/dgds/scene.cpp
 +++ b/engines/dgds/scene.cpp
 @@ -521,6 +521,7 @@ _mouseDownArea(nullptr), _mouseDownCounter(0) {
@@ -1361,7 +1403,18 @@ index a83096e7..1893f8ff 100644
  	Common::SeekableReadStream *sceneFile = resourceManager->getResource(filename);
  	if (!sceneFile)
  		error("Scene file %s not found", filename.c_str());
-@@ -1403,6 +1404,29 @@ void SDSScene::bothButtonAction(const Common::Point &pt) {
+@@ -993,6 +994,10 @@ void SDSScene::showDialog(uint16 fileNum, uint16 dlgNum) {
+ 
+ 			_conversation.loadData(fileNum, dlgNum, -1, haveHeadData);
+ 
++			// ROTD CHT: play this line's voice clip (Sega CD / TTS). No-op if voice is off
++			// or this dialog has no mapped clip. fileNum 0 (ROTD) -> the current scene number.
++			DgdsEngine::getInstance()->getVoice().playVoice(fileNum ? fileNum : getNum(), dlgNum);
++
+ 			// hide time gets set the first time it's drawn.
+ 			if (_dlgWithFlagLo8IsClosing && dialog.hasFlag(kDlgFlagLo8)) {
+ 				_sceneDialogFlags = static_cast<DialogFlags>(_sceneDialogFlags | kDlgFlagLo8 | kDlgFlagVisible);
+@@ -1403,6 +1408,29 @@ void SDSScene::bothButtonAction(const Common::Point &pt) {
  	}
  }
  
@@ -1619,3 +1672,206 @@ index 36ed1bc4..e8c5345e 100644
  		break;
  	}
  	case 0xa300:
+diff --git a/engines/dgds/voice.cpp b/engines/dgds/voice.cpp
+new file mode 100644
+index 00000000..453a827e
+--- /dev/null
++++ b/engines/dgds/voice.cpp
+@@ -0,0 +1,134 @@
++/* ScummVM dgds voice-acting support (Rise of the Dragon CHT). Non-upstream. */
++
++#include "common/file.h"
++#include "common/debug.h"
++#include "common/fs.h"
++#include "common/config-manager.h"
++#include "common/tokenizer.h"
++#include "audio/audiostream.h"
++#include "audio/decoders/wave.h"
++#include "dgds/voice.h"
++
++namespace Dgds {
++
++const char *VoiceSupport::dirForMode(VoiceMode m) {
++	switch (m) {
++	case kVoiceEN: return "voice_en";
++	case kVoiceJA: return "voice_ja";
++	case kVoiceZH: return "voice_zh";
++	default:       return nullptr;
++	}
++}
++
++bool VoiceSupport::hasSet(VoiceMode m) const {
++	for (uint i = 0; i < _avail.size(); i++)
++		if (_avail[i] == m)
++			return true;
++	return false;
++}
++
++const char *VoiceSupport::modeName() const {
++	switch (_mode) {
++	case kVoiceEN: return "English voice";
++	case kVoiceJA: return "Japanese voice";
++	case kVoiceZH: return "Chinese voice";
++	default:       return "voice off";
++	}
++}
++
++bool VoiceSupport::load() {
++	// 1) scene:num -> audio base name, from build/voice.map (deployed next to the game / extra path).
++	Common::File f;
++	if (f.open("voice.map")) {
++		while (!f.eos()) {
++			Common::String line = f.readLine();
++			line.trim();
++			if (line.empty())
++				continue;
++			uint32 sp = line.findFirstOf(' ');
++			if (sp == Common::String::npos)
++				continue;
++			_map[line.substr(0, sp)] = line.substr(sp + 1);
++		}
++		f.close();
++	}
++	// 2) Which voice sets are actually on disk (voice_en/ etc. as a subdir of the game path).
++	_avail.clear();
++	Common::FSNode game(ConfMan.getPath("path"));
++	const VoiceMode modes[] = { kVoiceEN, kVoiceJA, kVoiceZH };
++	for (int i = 0; i < 3; i++) {
++		Common::FSNode d = game.getChild(dirForMode(modes[i]));
++		if (d.exists() && d.isDirectory())
++			_avail.push_back(modes[i]);
++	}
++	_loaded = !_map.empty();
++	debug(1, "VoiceSupport: %d dialog->voice mappings, %d voice set(s) present", (int)_map.size(), (int)_avail.size());
++	return _loaded;
++}
++
++void VoiceSupport::setMode(VoiceMode m) {
++	if (m != kVoiceOff && !hasSet(m))
++		m = kVoiceOff;
++	if (m == _mode)
++		return;
++	stop();
++	_mode = m;
++}
++
++void VoiceSupport::cycleMode() {
++	// off -> EN -> JA -> ZH -> off, skipping any set that isn't present.
++	VoiceMode m = _mode;
++	for (int i = 0; i < 4; i++) {
++		m = (VoiceMode)((m + 1) % 4);
++		if (m == kVoiceOff || hasSet(m)) {
++			setMode(m);
++			return;
++		}
++	}
++	setMode(kVoiceOff);
++}
++
++void VoiceSupport::playVoice(int sceneNum, int dlgNum) {
++	if (_mode == kVoiceOff || !_loaded)
++		return;
++	Common::String key = Common::String::format("%d:%d", sceneNum, dlgNum);
++	if (!_map.contains(key))
++		return;
++	const char *dir = dirForMode(_mode);
++	if (!dir)
++		return;
++
++	// _map[key] is a comma-separated ORDERED list of clip names. A long line is split across
++	// disc files (RD.. = part 1, RE.. = part 2, ...); queue them so the whole line plays.
++	Common::FSNode vdir = Common::FSNode(ConfMan.getPath("path")).getChild(dir);
++	Audio::QueuingAudioStream *queue = Audio::makeQueuingAudioStream(16276, false);
++	int queued = 0;
++	Common::StringTokenizer parts(_map[key], ",");
++	while (!parts.empty()) {
++		Common::String p = parts.nextToken();
++		Common::SeekableReadStream *s = vdir.getChild(p + ".wav").createReadStream();
++		if (!s)
++			continue;
++		Audio::SeekableAudioStream *wav = Audio::makeWAVStream(s, DisposeAfterUse::YES);
++		if (wav) {
++			queue->queueAudioStream(wav, DisposeAfterUse::YES);
++			queued++;
++		}
++	}
++	if (!queued) {
++		delete queue;
++		debug(1, "voice: no clip found for dialog %s (%s)", key.c_str(), _map[key].c_str());
++		return;
++	}
++	queue->finish();
++	stop(); // one voice line at a time
++	_mixer->playStream(Audio::Mixer::kSpeechSoundType, &_handle, queue);
++	debug(1, "voice: play %s -> %s [%d part(s)]", key.c_str(), _map[key].c_str(), queued);
++}
++
++void VoiceSupport::stop() {
++	if (_mixer->isSoundHandleActive(_handle))
++		_mixer->stopHandle(_handle);
++}
++
++} // namespace Dgds
+diff --git a/engines/dgds/voice.h b/engines/dgds/voice.h
+new file mode 100644
+index 00000000..88d90a6b
+--- /dev/null
++++ b/engines/dgds/voice.h
+@@ -0,0 +1,57 @@
++/* ScummVM dgds voice-acting support (Rise of the Dragon CHT). Non-upstream.
++ *
++ * Plays Sega CD (English / Japanese) or Chinese-TTS voice clips in sync with the
++ * on-screen dialogs. Voice is an INDEPENDENT toggle (its own key), decoupled from
++ * the F8 display-language switch -- so you can read Chinese and hear English, etc.
++ */
++
++#ifndef DGDS_VOICE_H
++#define DGDS_VOICE_H
++
++#include "common/array.h"
++#include "common/hashmap.h"
++#include "common/hash-str.h"
++#include "common/str.h"
++#include "audio/mixer.h"
++
++namespace Dgds {
++
++enum VoiceMode {
++	kVoiceOff = 0,
++	kVoiceEN,    // US Sega CD English voice acting
++	kVoiceJA,    // Japan Sega CD Japanese dub
++	kVoiceZH,    // Chinese TTS dub
++};
++
++// Deep module: hide the manifest + per-mode wav lookup + mixer behind a narrow interface.
++// load() once, then playVoice() on each dialog open; cycleMode() from the voice key.
++class VoiceSupport {
++public:
++	explicit VoiceSupport(Audio::Mixer *mixer) : _mixer(mixer), _mode(kVoiceOff), _loaded(false) {}
++
++	bool load();                              // voice.map (scene:num -> audio base) + detect voice_*/ sets
++	bool isLoaded() const { return _loaded; }
++
++	VoiceMode mode() const { return _mode; }
++	const char *modeName() const;
++	void setMode(VoiceMode m);
++	void cycleMode();                         // off -> EN -> JA -> ZH -> off, skipping sets not present
++
++	void playVoice(int sceneNum, int dlgNum); // called when a dialog opens (scene.cpp showDialog)
++	void stop();
++
++private:
++	static const char *dirForMode(VoiceMode m);   // "voice_en" / "voice_ja" / "voice_zh" / nullptr
++	bool hasSet(VoiceMode m) const;
++
++	Audio::Mixer *_mixer;
++	Audio::SoundHandle _handle;
++	Common::HashMap<Common::String, Common::String> _map; // "scene:num" -> audio base name (e.g. "RD0301")
++	Common::Array<VoiceMode> _avail;                       // voice sets actually present on disk
++	VoiceMode _mode;
++	bool _loaded;
++};
++
++} // namespace Dgds
++
++#endif
