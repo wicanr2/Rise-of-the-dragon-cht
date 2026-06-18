@@ -67,7 +67,7 @@ docker run --rm \
 # CJK assets + launcher that package_full.sh windows expects (on host; build/ must be populated).
 WINBUN="dist/rotd-cht-windows-x86_64"
 mkdir -p "$WINBUN/extra"
-for a in build/zh.dtr build/de.dtr build/dragon_zh24.dcjk build/dragon_zh16.dcjk; do
+for a in build/zh.dtr build/de.dtr build/ja.dtr build/dragon_zh24.dcjk build/dragon_zh16.dcjk build/dragon_ja24.dcjk; do
   [ -f "$a" ] && cp -L "$a" "$WINBUN/extra/" || echo "  ! missing $a (run build_translation.py / build_cjk_font.py)"
 done
 # play-rotd-cht.bat: CRLF, points scummvm.exe at the sibling extra/ + game/.

@@ -62,3 +62,13 @@ dist/rotd-cht-android*.apk
 voice_samples/
 en_voice/
 segacd_us/
+# Voice TTS output + Sega CD reference audio (copyrighted / derived) — NEVER commit
+de_voice/
+zh_voice/
+ja_voice/
+RiseOfDragonAudioCopy/
+ja_voice.json
+*.log
+transcribe_all.py
+screenshots/*.mp4
+screenshots/android_rec*.mp4

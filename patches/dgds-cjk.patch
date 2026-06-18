@@ -167,10 +167,10 @@ index 00000000..16d0eb13
 +#endif
 diff --git a/engines/dgds/cjk.cpp b/engines/dgds/cjk.cpp
 new file mode 100644
-index 00000000..acc4f773
+index 00000000..7c14a157
 --- /dev/null
 +++ b/engines/dgds/cjk.cpp
-@@ -0,0 +1,397 @@
+@@ -0,0 +1,425 @@
 +/* ScummVM dgds CJK localization support (Rise of the Dragon CHT). Non-upstream. */
 +
 +#include "common/file.h"
@@ -198,28 +198,54 @@ index 00000000..acc4f773
 +
 +static inline bool isBig5Lead(byte b) { return b >= 0x81 && b <= 0xFE; }
 +
++// Shift-JIS double-byte -> linear glyph index (matches tools/build_jp_font.py).
++static int sjisLinearIndex(byte lead, byte trail) {
++	int lo;
++	if (lead >= 0x81 && lead <= 0x9F) lo = lead - 0x81;             // 0..30
++	else if (lead >= 0xE0 && lead <= 0xFC) lo = 31 + (lead - 0xE0); // 31..59
++	else return -1;
++	int to;
++	if (trail >= 0x40 && trail <= 0x7E) to = trail - 0x40;          // 0..62
++	else if (trail >= 0x80 && trail <= 0xFC) to = 63 + (trail - 0x80); // 63..188
++	else return -1;
++	return lo * 189 + to;
++}
++static inline bool isSjisLead(byte b) { return (b >= 0x81 && b <= 0x9F) || (b >= 0xE0 && b <= 0xFC); }
++
++// Dispatch the glyph index / lead-byte test on the ACTIVE font's encoding.
++int CJKSupport::charIndex(byte b1, byte b2) const {
++	return _enc == 1 ? sjisLinearIndex(b1, b2) : big5LinearIndex(b1, b2);
++}
++bool CJKSupport::isLeadByte(byte b) const {
++	return _enc == 1 ? isSjisLead(b) : isBig5Lead(b);
++}
++
 +CJKSupport::CJKSupport()
 +	: _loaded(false), _mode(kDispZH24), _w(0), _h(0), _bpr(0), _numGlyphs(0), _glyphs(nullptr) {}
 +
-+CJKSupport::~CJKSupport() { delete[] _font24.glyphs; delete[] _font16.glyphs; }
++CJKSupport::~CJKSupport() { delete[] _font24.glyphs; delete[] _font16.glyphs; delete[] _fontJA.glyphs; }
 +
 +bool CJKSupport::load() {
 +	loadFont("dragon_zh24.dcjk", _font24);
 +	loadFont("dragon_zh16.dcjk", _font16);
++	loadFont("dragon_ja24.dcjk", _fontJA);   // optional Shift-JIS Japanese font (kDispJA)
 +	loadTranslations("zh.dtr", _zh);
 +	loadTranslations("de.dtr", _de); // optional German overlay (Latin, original font)
++	loadTranslations("ja.dtr", _ja); // optional Japanese overlay (Shift-JIS, JP bitmap font)
 +
 +	_avail.clear();
 +	_avail.push_back(kDispOrig);
 +	if (_font24.glyphs && !_zh.empty()) _avail.push_back(kDispZH24);
 +	if (_font16.glyphs && !_zh.empty()) _avail.push_back(kDispZH16);
 +	if (!_de.empty()) _avail.push_back(kDispDE);
++	if (_fontJA.glyphs && !_ja.empty()) _avail.push_back(kDispJA);
 +
 +	_mode = (_font24.glyphs && !_zh.empty()) ? kDispZH24 : kDispOrig;
 +	selectActiveFont();
 +	_loaded = (_font24.glyphs != nullptr);
-+	debug(1, "CJKSupport: zh=%d de=%d font24=%d font16=%d modes=%d",
-+	      (int)_zh.size(), (int)_de.size(), _font24.glyphs != nullptr, _font16.glyphs != nullptr, (int)_avail.size());
++	debug(1, "CJKSupport: zh=%d de=%d ja=%d font24=%d font16=%d fontJA=%d modes=%d",
++	      (int)_zh.size(), (int)_de.size(), (int)_ja.size(),
++	      _font24.glyphs != nullptr, _font16.glyphs != nullptr, _fontJA.glyphs != nullptr, (int)_avail.size());
 +	return _loaded;
 +}
 +
@@ -236,7 +262,7 @@ index 00000000..acc4f773
 +	dst.w = f.readByte();
 +	dst.h = f.readByte();
 +	dst.bpr = f.readByte();
-+	f.readByte();              // encoding
++	dst.encoding = f.readByte(); // 0 Big5 / 1 Shift-JIS
 +	f.readByte(); f.readByte(); // pad
 +	dst.num = f.readUint32LE();
 +	uint32 bytes = dst.num * dst.bpr * dst.h;
@@ -273,8 +299,10 @@ index 00000000..acc4f773
 +}
 +
 +void CJKSupport::selectActiveFont() {
-+	const BitmapFont &fnt = (_mode == kDispZH16) ? _font16 : _font24;
-+	_w = fnt.w; _h = fnt.h; _bpr = fnt.bpr; _numGlyphs = fnt.num; _glyphs = fnt.glyphs;
++	const BitmapFont &fnt = (_mode == kDispJA)   ? _fontJA
++	                      : (_mode == kDispZH16) ? _font16
++	                                             : _font24;
++	_w = fnt.w; _h = fnt.h; _bpr = fnt.bpr; _numGlyphs = fnt.num; _glyphs = fnt.glyphs; _enc = fnt.encoding;
 +}
 +
 +void CJKSupport::cycleMode() {
@@ -311,7 +339,7 @@ index 00000000..acc4f773
 +}
 +
 +const Common::HashMap<Common::String, Common::String> &CJKSupport::activeOverlay() const {
-+	return (_mode == kDispDE) ? _de : _zh;
++	return (_mode == kDispJA) ? _ja : (_mode == kDispDE) ? _de : _zh;
 +}
 +
 +const Common::String *CJKSupport::lookupDialog(int sceneNum, int dlgNum) const {
@@ -360,7 +388,7 @@ index 00000000..acc4f773
 +	uint i = 0;
 +	while (i < s.size()) {
 +		byte b = (byte)s[i];
-+		if (isBig5Lead(b) && i + 1 < s.size() && big5LinearIndex(b, (byte)s[i + 1]) >= 0) {
++		if (isLeadByte(b) && i + 1 < s.size() && charIndex(b, (byte)s[i + 1]) >= 0) {
 +			w += _w / 2; i += 2; // layout in 320x200 space; font is 2x
 +		} else {
 +			if (b != '\r' && asciiFont) w += asciiFont->getCharWidth(b);
@@ -383,7 +411,7 @@ index 00000000..acc4f773
 +		}
 +		Common::String unit;
 +		int uw;
-+		if (isBig5Lead(b) && i + 1 < s.size() && big5LinearIndex(b, (byte)s[i + 1]) >= 0) {
++		if (isLeadByte(b) && i + 1 < s.size() && charIndex(b, (byte)s[i + 1]) >= 0) {
 +			unit += (char)b; unit += s[i + 1]; uw = _w / 2; i += 2;
 +		} else {
 +			unit += (char)b; uw = asciiFont ? asciiFont->getCharWidth(b) : 6; i += 1;
@@ -485,8 +513,8 @@ index 00000000..acc4f773
 +		uint i = 0;
 +		while (i < dl.text.size()) {
 +			byte b = (byte)dl.text[i];
-+			if (isBig5Lead(b) && i + 1 < dl.text.size()) {
-+				int idx = big5LinearIndex(b, (byte)dl.text[i + 1]);
++			if (isLeadByte(b) && i + 1 < dl.text.size()) {
++				int idx = charIndex(b, (byte)dl.text[i + 1]);
 +				if (idx >= 0) {
 +					drawGlyph(dst, idx, xcur, y, dl.color);
 +					xcur += _w; i += 2; continue;
@@ -519,7 +547,7 @@ index 00000000..acc4f773
 +// clean carved stone above the dragon-triangle emblem. Matches the look of Willy Beamish's CHT
 +// subtitle: dark 8-direction outline then a gold body, color-matched to the live title palette.
 +void CJKSupport::drawTitleSubtitle(Graphics::ManagedSurface *dst) {
-+	if (!_glyphs)
++	if (!_glyphs || _enc != 0) // Big5 glyph indices below; skip when a non-Big5 font is active (日本語)
 +		return;
 +	byte pal[768];
 +	g_system->getPaletteManager()->grabPalette(pal, 0, 256);
@@ -570,10 +598,10 @@ index 00000000..acc4f773
 +} // namespace Dgds
 diff --git a/engines/dgds/cjk.h b/engines/dgds/cjk.h
 new file mode 100644
-index 00000000..7c22eecb
+index 00000000..a209fa69
 --- /dev/null
 +++ b/engines/dgds/cjk.h
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,127 @@
 +/* ScummVM dgds CJK / multi-language localization support (Rise of the Dragon CHT).
 + * Non-upstream: engine-side translation overlays + bitmap fonts + display-mode cycle.
 + */
@@ -654,6 +682,7 @@ index 00000000..7c22eecb
 +private:
 +	struct BitmapFont {
 +		byte w = 0, h = 0, bpr = 0;
++		byte encoding = 0; // 0 = Big5 linear index, 1 = Shift-JIS linear index
 +		uint32 num = 0;
 +		byte *glyphs = nullptr;
 +	};
@@ -664,6 +693,9 @@ index 00000000..7c22eecb
 +	const byte *glyphPtr(int idx) const;
 +	void drawGlyph(Graphics::ManagedSurface *dst, int idx, int x, int y, uint32 color) const;
 +	void drawTitleSubtitle(Graphics::ManagedSurface *dst); // 城市獵人 caption on the ROTD title screen
++	// Glyph index for the ACTIVE font's encoding (Big5 for 中文, Shift-JIS for 日本語).
++	int charIndex(byte b1, byte b2) const;
++	bool isLeadByte(byte b) const;
 +	const Common::HashMap<Common::String, Common::String> &activeOverlay() const;
 +	struct DeferredLine;
 +	void drawDeferredLine(Graphics::ManagedSurface *dst, const DeferredLine &dl);
@@ -672,14 +704,15 @@ index 00000000..7c22eecb
 +	DisplayMode _mode;
 +	Common::Array<DisplayMode> _avail; // modes whose data actually loaded
 +
-+	BitmapFont _font24, _font16;
-+	// active font fields (mirror _font24 or _font16; used by the draw code)
++	BitmapFont _font24, _font16, _fontJA;
++	// active font fields (mirror the selected BitmapFont; used by the draw code)
 +	byte _w, _h, _bpr;
++	byte _enc = 0; // active font's encoding (0 Big5 / 1 Shift-JIS)
 +	uint32 _numGlyphs;
 +	byte *_glyphs;
 +	int _titleTicks = 0; // frames remaining to draw the 城市獵人 title caption (latched on SYMBOL.SCR)
 +
-+	Common::HashMap<Common::String, Common::String> _zh, _de;
++	Common::HashMap<Common::String, Common::String> _zh, _de, _ja;
 +
 +	struct DeferredLine {
 +		Common::String text;

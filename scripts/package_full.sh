@@ -46,7 +46,8 @@ Rise of the Dragon 繁體中文版 — 完整自留包
 
 玩法
   $2
-  預設中文 24×24；遊戲中按 F8 循環 中文24 / 中文16 / 德文 / 英文。
+  預設中文 24×24；遊戲中按 F8 循環 中文24 / 中文16 / 德文 / 日文 / 英文。
+  按 F9 循環語音語言（英 / 日 / 中 / 德 / 關），可獨立於字幕語言。
 
 ⚠ 版權：本包含受版權的遊戲本體(Dynamix / Sierra 之權利繼承者)。
   僅供你個人、對你合法擁有之遊戲的存檔與遊玩，請勿散布／公開分享。
@@ -94,7 +95,9 @@ build_mac() {
   rm -rf "$O"; mkdir -p "$O"
   tar xzf "$CIAPP" -C "$O"                                   # -> "Rise of the Dragon CHT.app"
   local EXTRA="$O/Rise of the Dragon CHT.app/Contents/Resources/extra"
-  cp build/de.dtr "$EXTRA/" 2>/dev/null || true             # CI doesn't build de.dtr; add it locally
+  # CI can't build de.dtr / ja.dtr / dragon_ja24.dcjk (their source JSONs are gitignored
+  # copyrighted RE material), so graft them into the CI .app locally.
+  cp build/de.dtr build/ja.dtr build/dragon_ja24.dcjk "$EXTRA/" 2>/dev/null || true
   copy_game "$O"; copy_voice "$O"
   cat > "$O/玩-rotd-cht.command" <<'CMD'
 #!/bin/bash

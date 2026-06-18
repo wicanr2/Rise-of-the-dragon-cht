@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 SV="${SCUMMVM:-/home/anr2/zak-zh/tools/scummvm-src/scummvm}"
 NAME="rotd-cht-linux-x86_64"
 OUT="dist/$NAME"
-ASSETS=(build/zh.dtr build/de.dtr build/dragon_zh24.dcjk build/dragon_zh16.dcjk)
+ASSETS=(build/zh.dtr build/de.dtr build/ja.dtr build/dragon_zh24.dcjk build/dragon_zh16.dcjk build/dragon_ja24.dcjk)
 
 [ -x "$SV" ] || { echo "ERROR: scummvm binary not found at $SV"; exit 1; }
 rm -rf "$OUT"; mkdir -p "$OUT/bin" "$OUT/lib" "$OUT/share/rotd-cht"
@@ -38,7 +38,7 @@ cat > "$OUT/rotd-cht.sh" <<'LAUNCH'
 # Rise of the Dragon 繁體中文版 launcher.
 # 用法: ./rotd-cht.sh [你的遊戲資料夾]
 #   給遊戲資料夾 -> 直接啟動並載入；不給 -> 開啟 ScummVM 啟動器自行加入遊戲。
-# 遊戲中按 F8 循環顯示模式：英文 / 中文24 / 中文16 / 德文。
+# 遊戲中按 F8 循環顯示模式：中文24 / 中文16 / 德文 / 日文 / 英文。F9 循環語音。
 HERE="$(cd "$(dirname "$0")" && pwd)"
 export LD_LIBRARY_PATH="$HERE/lib:${LD_LIBRARY_PATH:-}"
 SV="$HERE/bin/scummvm"; EXTRA="$HERE/share/rotd-cht"
@@ -74,12 +74,13 @@ Rise of the Dragon 繁體中文版 (patched ScummVM bundle)
   2) 指定路徑：   ./rotd-cht.sh /路徑/到/你的/遊戲資料夾
   3) 用啟動器：   ./rotd-cht.sh （找不到遊戲時）會開 ScummVM 介面，手動加入遊戲一次即可。
 
-預設就是中文（24×24）。遊戲中按 F8 循環：中文 24×24 → 中文 16×16 → 德文 → 英文(原始)。
+預設就是中文（24×24）。遊戲中按 F8 循環：中文 24×24 → 中文 16×16 → 德文 → 日文 → 英文(原始)。
+語音：按 F9 循環語音語言（英 / 日 / 中 / 德 / 關），可獨立於字幕語言。
 
 內容
   bin/scummvm          patched ScummVM（dgds 引擎 + CJK 模組）
   lib/                 隨附函式庫（SDL2、freetype、fluidsynth、codecs…）
-  share/rotd-cht/      語言資產：zh.dtr(中文)、de.dtr(德文)、dragon_zh24/16.dcjk(點陣字型)
+  share/rotd-cht/      語言資產：zh.dtr(中文)、de.dtr(德文)、ja.dtr(日文)、dragon_zh24/16.dcjk + dragon_ja24.dcjk(點陣字型)
 
 說明
   - 本套件相依你系統的 glibc 與顯示(GL/X11/Wayland)堆疊，適用多數現代 x86_64 Linux。

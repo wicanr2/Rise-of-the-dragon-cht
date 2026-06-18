@@ -25,8 +25,8 @@ make -j"$(sysctl -n hw.ncpu)"
 make bundle 2>/dev/null || true
 rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/extra"
 cp scummvm "$APP/Contents/MacOS/"
-cp "$ASSETS_DIR"/zh.dtr "$ASSETS_DIR"/de.dtr \
-   "$ASSETS_DIR"/dragon_zh24.dcjk "$ASSETS_DIR"/dragon_zh16.dcjk \
+cp "$ASSETS_DIR"/zh.dtr "$ASSETS_DIR"/de.dtr "$ASSETS_DIR"/ja.dtr \
+   "$ASSETS_DIR"/dragon_zh24.dcjk "$ASSETS_DIR"/dragon_zh16.dcjk "$ASSETS_DIR"/dragon_ja24.dcjk \
    "$APP/Contents/Resources/extra/"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -44,4 +44,4 @@ PLIST
 #   dylibbundler -od -b -x "$APP/Contents/MacOS/scummvm" -d "$APP/Contents/libs" -p @executable_path/../libs
 echo "Built: $APP"
 echo "Run:   open '$APP'  (then add your ROTD game; set Extra Path to Contents/Resources/extra)"
-echo "       In-game F8 cycles EN / ZH24 / ZH16 / DE."
+echo "       In-game F8 cycles ZH24 / ZH16 / DE / JA / EN; F9 cycles voice."

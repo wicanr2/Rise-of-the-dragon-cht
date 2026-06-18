@@ -16,7 +16,7 @@ GAMES="build/android_games"   # contains riseofthedragon/ (game + dcjk/dtr)
 # Refresh the localization assets from the canonical build/ artifacts so a stale snapshot in
 # android_games/ can't silently ship an old translation (this bit us: desktop got the new zh.dtr
 # but the APK kept the old one). Game data (VOLUME.*) in android_games/ is the static base.
-for a in zh.dtr dragon_zh24.dcjk dragon_zh16.dcjk; do
+for a in zh.dtr de.dtr ja.dtr dragon_zh24.dcjk dragon_zh16.dcjk dragon_ja24.dcjk; do
   [ -f "build/$a" ] && cp -f "build/$a" "$GAMES/riseofthedragon/$a"
 done
 echo "android_games zh.dtr md5: $(md5sum "$GAMES/riseofthedragon/zh.dtr" | cut -d' ' -f1)"
