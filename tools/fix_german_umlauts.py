@@ -10,6 +10,7 @@ Usage: fix_german_umlauts.py in.dtr out.dtr
 import struct, sys
 
 SUB = {'ä':'ae','ö':'oe','ü':'ue','Ä':'Ae','Ö':'Oe','Ü':'Ue','ß':'ss',
+       '░':'ss',  # German source had ß mojibake'd to ░ (U+2591 / cp437 0xB0); treat as ß
        'á':'a','é':'e','è':'e','ê':'e','à':'a','ç':'c','î':'i','ô':'o','û':'u','â':'a'}
 
 def main():
