@@ -1676,10 +1676,10 @@ index 36ed1bc4..e8c5345e 100644
  	case 0xa300:
 diff --git a/engines/dgds/voice.cpp b/engines/dgds/voice.cpp
 new file mode 100644
-index 00000000..5fc0bc02
+index 00000000..75ded91e
 --- /dev/null
 +++ b/engines/dgds/voice.cpp
-@@ -0,0 +1,153 @@
+@@ -0,0 +1,162 @@
 +/* ScummVM dgds voice-acting support (Rise of the Dragon CHT). Non-upstream. */
 +
 +#include "common/file.h"
@@ -1689,9 +1689,26 @@ index 00000000..5fc0bc02
 +#include "common/tokenizer.h"
 +#include "audio/audiostream.h"
 +#include "audio/decoders/wave.h"
++#ifdef USE_VORBIS
++#include "audio/decoders/vorbis.h"
++#endif
 +#include "dgds/voice.h"
 +
 +namespace Dgds {
++
++// Open one voice clip, preferring the compressed .ogg (shipped) and falling back to .wav
++// (raw, for local dev). Returns nullptr if neither is present / decodable.
++static Audio::SeekableAudioStream *openClip(const Common::FSNode &dir, const Common::String &name) {
++#ifdef USE_VORBIS
++	Common::SeekableReadStream *o = dir.getChild(name + ".ogg").createReadStream();
++	if (o)
++		return Audio::makeVorbisStream(o, DisposeAfterUse::YES);
++#endif
++	Common::SeekableReadStream *w = dir.getChild(name + ".wav").createReadStream();
++	if (w)
++		return Audio::makeWAVStream(w, DisposeAfterUse::YES);
++	return nullptr;
++}
 +
 +const char *VoiceSupport::dirForMode(VoiceMode m) {
 +	switch (m) {
@@ -1785,16 +1802,12 @@ index 00000000..5fc0bc02
 +	// 8_4.wav) -- no disc-clip split, and scene:num naming avoids the English manifest's "one clip
 +	// reused for several dialogs" collisions. Play it straight, at the file's own sample rate.
 +	if (_mode == kVoiceZH || _mode == kVoiceDE) {
-+		Common::FSNode node = vdir.getChild(Common::String::format("%d_%d.wav", sceneNum, dlgNum));
-+		Common::SeekableReadStream *s = node.createReadStream();
-+		if (!s)
-+			return;
-+		Audio::SeekableAudioStream *wav = Audio::makeWAVStream(s, DisposeAfterUse::YES);
-+		if (!wav)
++		Audio::SeekableAudioStream *clip = openClip(vdir, Common::String::format("%d_%d", sceneNum, dlgNum));
++		if (!clip)
 +			return;
 +		stop();
-+		_mixer->playStream(Audio::Mixer::kSpeechSoundType, &_handle, wav);
-+		debug(1, "voice: play %s -> %s/%d_%d.wav (TTS)", key.c_str(), dir, sceneNum, dlgNum);
++		_mixer->playStream(Audio::Mixer::kSpeechSoundType, &_handle, clip);
++		debug(1, "voice: play %s -> %s/%d_%d (TTS)", key.c_str(), dir, sceneNum, dlgNum);
 +		return;
 +	}
 +
@@ -1806,13 +1819,9 @@ index 00000000..5fc0bc02
 +	int queued = 0;
 +	Common::StringTokenizer parts(_map[key], ",");
 +	while (!parts.empty()) {
-+		Common::String p = parts.nextToken();
-+		Common::SeekableReadStream *s = vdir.getChild(p + ".wav").createReadStream();
-+		if (!s)
-+			continue;
-+		Audio::SeekableAudioStream *wav = Audio::makeWAVStream(s, DisposeAfterUse::YES);
-+		if (wav) {
-+			queue->queueAudioStream(wav, DisposeAfterUse::YES);
++		Audio::SeekableAudioStream *clip = openClip(vdir, parts.nextToken());
++		if (clip) {
++			queue->queueAudioStream(clip, DisposeAfterUse::YES);
 +			queued++;
 +		}
 +	}
