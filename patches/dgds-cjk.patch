@@ -697,7 +697,7 @@ index 00000000..7c22eecb
 +
 +#endif
 diff --git a/engines/dgds/dgds.cpp b/engines/dgds/dgds.cpp
-index 63976485..bcdf6f89 100644
+index 63976485..e15b6883 100644
 --- a/engines/dgds/dgds.cpp
 +++ b/engines/dgds/dgds.cpp
 @@ -35,6 +35,8 @@
@@ -853,13 +853,14 @@ index 63976485..bcdf6f89 100644
  }
  
  void DgdsEngine::loadRestartFile() {
-@@ -530,6 +616,18 @@ void DgdsEngine::pumpMessages() {
+@@ -530,6 +616,20 @@ void DgdsEngine::pumpMessages() {
  			case kDgdsKeyToggleClock:
  				_clock.toggleVisibleUser();
  				break;
 +			case kDgdsKeyToggleLanguage:
 +				_cjk.cycleMode();
 +				debug(1, "Display mode -> %s", _cjk.modeName());
++				g_system->displayMessageOnOSD(Common::U32String(_cjk.modeName()));
 +				// Modal menus/REQs are drawn once; repaint so the switch is immediate.
 +				// (In-scene dialogs already redraw every frame.)
 +				if (_menu->menuShown())
@@ -868,11 +869,12 @@ index 63976485..bcdf6f89 100644
 +			case kDgdsKeyToggleVoice:
 +				_voice->cycleMode();
 +				debug(1, "Voice -> %s", _voice->modeName());
++				g_system->displayMessageOnOSD(Common::U32String(Common::String::format("Voice: %s", _voice->modeName())));
 +				break;
  			case kDgdsKeyNextChoice:
  				if (_menu->menuShown())
  					_menu->nextChoice();
-@@ -574,7 +672,8 @@ void DgdsEngine::pumpMessages() {
+@@ -574,7 +674,8 @@ void DgdsEngine::pumpMessages() {
  				|| ev.type == Common::EVENT_RBUTTONDOWN || ev.type == Common::EVENT_RBUTTONUP
  				|| ev.type == Common::EVENT_MOUSEMOVE) {
  			_lastMouseEvent = ev.type;
@@ -882,7 +884,7 @@ index 63976485..bcdf6f89 100644
  			// We can keep going if there were multiple moves or a move then a button, but
  			// stop if there was a button event to process it now.
  			if (_lastMouseEvent != Common::EVENT_MOUSEMOVE)
-@@ -623,6 +722,9 @@ Common::Error DgdsEngine::run() {
+@@ -623,6 +724,9 @@ Common::Error DgdsEngine::run() {
  	init(false);
  	loadGameFiles();
  
@@ -892,7 +894,7 @@ index 63976485..bcdf6f89 100644
  	// If a savegame was selected from the launcher, load it now.
  	int saveSlot = ConfMan.getInt("save_slot");
  	if (saveSlot != -1)
-@@ -674,6 +776,28 @@ Common::Error DgdsEngine::run() {
+@@ -674,6 +778,28 @@ Common::Error DgdsEngine::run() {
  		} else {
  			debug(10, "****  Starting frame %d time %d ****", frameCount, _thisFrameMs);
  
@@ -921,7 +923,7 @@ index 63976485..bcdf6f89 100644
  			bool clearedDlg = _scene->checkForClearedDialogs();
  
  			// Willy pauses script execution when the palette is faded by an active
-@@ -789,7 +913,7 @@ Common::Error DgdsEngine::run() {
+@@ -789,7 +915,7 @@ Common::Error DgdsEngine::run() {
  			bool gameRunning = (!haveActiveDialog && _gameGlobals->getGlobal(0x57));
  			_clock.update(gameRunning && shouldRunScripts);
  
@@ -930,7 +932,7 @@ index 63976485..bcdf6f89 100644
  
  			_justChangedScene1 = false;
  		}
-@@ -807,7 +931,11 @@ Common::Error DgdsEngine::run() {
+@@ -807,7 +933,11 @@ Common::Error DgdsEngine::run() {
  				CursorMan.showMouse(false);
  		}
  
