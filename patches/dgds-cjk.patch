@@ -1676,10 +1676,10 @@ index 36ed1bc4..e8c5345e 100644
  	case 0xa300:
 diff --git a/engines/dgds/voice.cpp b/engines/dgds/voice.cpp
 new file mode 100644
-index 00000000..75ded91e
+index 00000000..b1515c99
 --- /dev/null
 +++ b/engines/dgds/voice.cpp
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,178 @@
 +/* ScummVM dgds voice-acting support (Rise of the Dragon CHT). Non-upstream. */
 +
 +#include "common/file.h"
@@ -1815,6 +1815,10 @@ index 00000000..75ded91e
 +	// A long line is split (RD..=part1, RE..=part2); queue them so the whole line plays.
 +	if (!_map.contains(key))
 +		return;
++	int expected = 1;
++	for (uint i = 0; i < _map[key].size(); i++)
++		if (_map[key][i] == ',')
++			expected++;
 +	Audio::QueuingAudioStream *queue = Audio::makeQueuingAudioStream(16276, false);
 +	int queued = 0;
 +	Common::StringTokenizer parts(_map[key], ",");
@@ -1823,6 +1827,18 @@ index 00000000..75ded91e
 +		if (clip) {
 +			queue->queueAudioStream(clip, DisposeAfterUse::YES);
 +			queued++;
++		}
++	}
++	// Disc dub incomplete for this line (e.g. the JP disc only recorded the first half)? Prefer a
++	// scene:num TTS-fill clip if one exists, so the line plays whole instead of being truncated.
++	if (queued < expected) {
++		Audio::SeekableAudioStream *tts = openClip(vdir, Common::String::format("%d_%d", sceneNum, dlgNum));
++		if (tts) {
++			delete queue;
++			stop();
++			_mixer->playStream(Audio::Mixer::kSpeechSoundType, &_handle, tts);
++			debug(1, "voice: play %s -> %s/%d_%d (TTS fill; disc %d/%d)", key.c_str(), dir, sceneNum, dlgNum, queued, expected);
++			return;
 +		}
 +	}
 +	if (!queued) {
