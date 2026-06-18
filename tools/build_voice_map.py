@@ -28,7 +28,7 @@ def main():
         sc = re.sub(r"[^0-9]", "", scene)          # S8.SDS -> 8
         for n in c[3:]:
             if n.isdigit():
-                d[f"{sc}:{n}"].append(base)
+                d[f"{sc}:{n}"].append(base.upper())  # clip files are UPPERCASE RDxxxx; audio.csv casing varies
     os.makedirs("build", exist_ok=True)
     multi = 0
     with open(OUT, "w") as f:
